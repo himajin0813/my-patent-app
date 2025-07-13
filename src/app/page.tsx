@@ -48,7 +48,7 @@ const PatentAnalysisApp = () => {
   };
 
   // カスタムY軸ティックコンポーネント
-  const CustomYAxisTick = ({ x, y, payload }) => {
+  const CustomYAxisTick = ({ x, y, payload }: { x: number; y: number; payload: any }) => {
     const lines = String(payload.value).split('\n');
     return (
       <g transform={`translate(${x},${y})`}>
