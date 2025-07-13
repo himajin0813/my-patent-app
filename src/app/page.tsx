@@ -108,7 +108,7 @@ const PatentAnalysisApp = () => {
           }
 
           // データを処理
-          const processedData = data.slice(1).map((row, index) => {
+          const processedData = data.slice(1).map((row) => {
             const obj = {};
             headers.forEach((header, headerIndex) => {
               obj[header] = row[headerIndex] || '';
