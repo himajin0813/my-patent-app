@@ -74,7 +74,7 @@ const PatentAnalysisApp = () => {
   };
 
   // CSVファイルの読み込み
-  const handleFileUpload = (event) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files[0];
     if (!file) return;
 
