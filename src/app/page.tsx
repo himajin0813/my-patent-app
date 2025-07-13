@@ -15,7 +15,7 @@ const PatentAnalysisApp = () => {
   const chartRefs = useRef({});
 
   // 社名を折り返し表示する関数
-  const wrapText = (text, maxLength = 20) => {
+  const wrapText = (text: string, maxLength = 20) => {
     if (!text || text.length <= maxLength) return text;
     
     const words = text.split(/[\s\-\/・]/);
