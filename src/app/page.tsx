@@ -78,7 +78,7 @@ const PatentAnalysisApp = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    setSelectedFile(file);
     setLoading(true);
     setError(null);
 
