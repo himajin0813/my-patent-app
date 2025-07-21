@@ -95,7 +95,8 @@ const PatentAnalysisApp = () => {
           console.log('Headers:', headers); // デバッグ用
           
           // J-PlatPatの主要な列名を検索
-          const applicationDateColumn = headers.find(col => 
+          // ヘッダーを取得（J-PlatPat形式）
+          const headers = data[0] as string[];
             col.includes('出願日') || col.includes('Application Date') || col.includes('出願年月日')
           );
           const applicantColumn = headers.find(col => 
