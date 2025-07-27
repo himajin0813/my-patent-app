@@ -1,21 +1,20 @@
-"use client";
 import React, { useState, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Upload, BarChart3, TrendingUp, Target } from 'lucide-react';
-import * as Papa from 'papaparse';
+import Papa from 'papaparse';
 
 const PatentAnalysisApp = () => {
   const [csvData, setCsvData] = useState(null);
   const [analysisResults, setAnalysisResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
   const chartRefs = useRef({});
 
   // 社名を折り返し表示する関数
-  const wrapText = (text: string, maxLength = 20) => {
+  const wrapText = (text, maxLength = 20) => {
     if (!text || text.length <= maxLength) return text;
     
     const words = text.split(/[\s\-\/・]/);
@@ -48,11 +47,7 @@ const PatentAnalysisApp = () => {
   };
 
   // カスタムY軸ティックコンポーネント
-  const CustomYAxisTick = ({ x, y, payload }: { 
-   x: number; 
-   y: number; 
-   payload: { value: string } 
-  }) => {
+  const CustomYAxisTick = ({ x, y, payload }) => {
     const lines = String(payload.value).split('\n');
     return (
       <g transform={`translate(${x},${y})`}>
@@ -74,7 +69,7 @@ const PatentAnalysisApp = () => {
   };
 
   // CSVファイルの読み込み
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -91,12 +86,11 @@ const PatentAnalysisApp = () => {
           }
           
           // ヘッダーを取得（J-PlatPat形式）
-          const headers = data[0];
+          const headers = data[0] as string[];
           console.log('Headers:', headers); // デバッグ用
           
           // J-PlatPatの主要な列名を検索
-          // ヘッダーを取得（J-PlatPat形式）
-          const headers = data[0] as string[];
+          const applicationDateColumn = headers.find(col => 
             col.includes('出願日') || col.includes('Application Date') || col.includes('出願年月日')
           );
           const applicantColumn = headers.find(col => 
@@ -199,7 +193,9 @@ const PatentAnalysisApp = () => {
 
   // アップロードエリアクリック
   const handleUploadAreaClick = () => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   };
 
   // データ解析
