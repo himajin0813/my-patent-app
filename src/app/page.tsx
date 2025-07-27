@@ -1,3 +1,4 @@
+"use client";
 import React, { useState, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Upload, BarChart3, TrendingUp, Target } from 'lucide-react';
