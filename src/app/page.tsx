@@ -1,20 +1,35 @@
-import React, { useState, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
-import { Upload, BarChart3, TrendingUp, Target } from 'lucide-react';
+"use client";
+import { BarChart3, Target, TrendingUp, Upload } from 'lucide-react';
 import Papa from 'papaparse';
+import React, { useRef, useState } from 'react';
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { PieLabelProps } from '../../node_modules/recharts/types/polar/Pie';
+
+type AnalysisResults = {
+  yearCounts: Record<string, number>;
+  leadingCompanies: Record<string, number>;
+  allCompanies: Record<string, number>;
+  leadingFIs: Record<string, number>;
+  allFIs: Record<string, number>;
+  companyYearAnalysis: Record<string, Record<string, number>>;
+  fiYearAnalysis: Record<string, Record<string, number>>;
+  hasApplicantData: boolean;
+  hasFIData: boolean;
+};
+
 
 const PatentAnalysisApp = () => {
-  const [csvData, setCsvData] = useState(null);
-  const [analysisResults, setAnalysisResults] = useState(null);
+  const [csvData, setCsvData] = useState<any[] | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<AnalysisResults | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [error, setError] = useState<any>(null);
+  const [selectedFile, setSelectedFile] = useState<any | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
-  const chartRefs = useRef({});
+  const chartRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // 社名を折り返し表示する関数
-  const wrapText = (text, maxLength = 20) => {
+  const wrapText = (text: string, maxLength = 20) => {
     if (!text || text.length <= maxLength) return text;
     
     const words = text.split(/[\s\-\/・]/);
@@ -47,7 +62,7 @@ const PatentAnalysisApp = () => {
   };
 
   // カスタムY軸ティックコンポーネント
-  const CustomYAxisTick = ({ x, y, payload }) => {
+  const CustomYAxisTick = ({ x, y, payload }: { x: number, y: number, payload: { value: number } }) => {
     const lines = String(payload.value).split('\n');
     return (
       <g transform={`translate(${x},${y})`}>
@@ -69,7 +84,7 @@ const PatentAnalysisApp = () => {
   };
 
   // CSVファイルの読み込み
-  const handleFileUpload = (event) => {
+  const handleFileUpload = (event: any) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -86,17 +101,17 @@ const PatentAnalysisApp = () => {
           }
           
           // ヘッダーを取得（J-PlatPat形式）
-          const headers = data[0];
+          const headers = data[0] as any
           console.log('Headers:', headers); // デバッグ用
           
           // J-PlatPatの主要な列名を検索
-          const applicationDateColumn = headers.find(col => 
+          const applicationDateColumn = headers.find((col: string) => 
             col && (col.includes('出願日') || col.includes('Application Date') || col.includes('出願年月日'))
           );
-          const applicantColumn = headers.find(col => 
+          const applicantColumn = headers.find((col: string) => 
             col && (col.includes('出願人') || col.includes('Applicant') || col.includes('権利者'))
           );
-          const fiColumn = headers.find(col => 
+          const fiColumn = headers.find((col: string) => 
             col && (col.includes('FI') || col.includes('F-term') || col.includes('分類'))
           );
           
@@ -107,13 +122,13 @@ const PatentAnalysisApp = () => {
           }
 
           // データを処理
-          const processedData = data.slice(1).map((row) => {
-            const obj = {};
-            headers.forEach((header, headerIndex) => {
+          const processedData = data.slice(1).map((row: any) => {
+            const obj = {} as any
+            headers.forEach((header: any, headerIndex: number) => {
               obj[header] = row[headerIndex] || '';
             });
             return obj;
-          }).filter(row => row[applicationDateColumn]); // 出願日がある行のみ
+          }).filter(row => row[applicationDateColumn]) // 出願日がある行のみ
 
           console.log('Processed data sample:', processedData[0]); // デバッグ用
 
@@ -144,8 +159,8 @@ const PatentAnalysisApp = () => {
 
           setCsvData(processedData);
           analyzeData(processedData, headers);
-        } catch (err) {
-          setError(err.message);
+        } catch (err: any) {
+          setError(err?.message || "");
           console.error('Error processing CSV:', err);
         } finally {
           setLoading(false);
@@ -160,17 +175,17 @@ const PatentAnalysisApp = () => {
   };
 
   // ドラッグ&ドロップ処理
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: any) => {
     e.preventDefault();
     setIsDragOver(true);
   };
 
-  const handleDragLeave = (e) => {
+  const handleDragLeave = (e: any) => {
     e.preventDefault();
     setIsDragOver(false);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: any) => {
     e.preventDefault();
     setIsDragOver(false);
     
@@ -194,39 +209,39 @@ const PatentAnalysisApp = () => {
   // アップロードエリアクリック
   const handleUploadAreaClick = () => {
     if (fileInputRef.current) {
-      fileInputRef.current.click();
+      (fileInputRef.current as any).click();
     }
   };
 
   // データ解析
-  const analyzeData = (data, headers) => {
+  const analyzeData = (data: any, headers: any) => {
     try {
       // 列名を特定
-      const applicantColumn = headers.find(col => 
+      const applicantColumn = headers.find((col: string) => 
         col && (col.includes('出願人') || col.includes('Applicant') || col.includes('権利者'))
       );
-      const fiColumn = headers.find(col => 
+      const fiColumn = headers.find((col: string) => 
         col && (col.includes('FI') || col.includes('F-term') || col.includes('分類'))
       );
 
       // 年別出願件数
-      const yearCounts = {};
-      data.forEach(row => {
+      const yearCounts = {} as any
+      data.forEach((row: any) => {
         if (row.Year) {
           yearCounts[row.Year] = (yearCounts[row.Year] || 0) + 1;
         }
       });
 
       // 筆頭会社分析
-      const leadingCompanies = {};
-      const allCompanies = {};
+      const leadingCompanies = {} as any
+      const allCompanies = {} as any
       
       if (applicantColumn) {
-        data.forEach(row => {
+        data.forEach((row: any) => {
           const applicant = row[applicantColumn];
           if (applicant) {
             // セミコロン、カンマ、改行などで分割
-            const companies = applicant.split(/[;,\n]/).map(c => c.trim()).filter(c => c);
+            const companies = applicant.split(/[;,\n]/).map((c: string) => c.trim()).filter((c: string) => c);
             if (companies.length > 0) {
               const leadingCompany = companies[0];
               
@@ -234,7 +249,7 @@ const PatentAnalysisApp = () => {
               leadingCompanies[leadingCompany] = (leadingCompanies[leadingCompany] || 0) + 1;
               
               // 全会社
-              companies.forEach(company => {
+              companies.forEach((company: any) => {
                 allCompanies[company] = (allCompanies[company] || 0) + 1;
               });
             }
@@ -243,19 +258,19 @@ const PatentAnalysisApp = () => {
       }
 
       // FI/分類分析
-      const leadingFIs = {};
-      const allFIs = {};
+      const leadingFIs = {} as any
+      const allFIs = {} as any
       
       if (fiColumn) {
-        data.forEach(row => {
+        data.forEach((row: any) => {
           const fi = row[fiColumn];
           if (fi) {
             // セミコロン、カンマ、改行などで分割
-            const fiCodes = fi.split(/[;,\n]/).map(code => {
+            const fiCodes = fi.split(/[;,\n]/).map((code: string) => {
               const trimmed = code.trim();
               // FIコードの先頭6文字を取得（末尾の記号を除去）
               return trimmed.length > 6 ? trimmed.substring(0, 6).replace(/[\/\-]$/, '') : trimmed;
-            }).filter(code => code);
+            }).filter((code: string) => code);
             
             if (fiCodes.length > 0) {
               const leadingFI = fiCodes[0];
@@ -266,7 +281,7 @@ const PatentAnalysisApp = () => {
               }
               
               // 全FI
-              fiCodes.forEach(code => {
+              fiCodes.forEach((code: string) => {
                 if (code) {
                   allFIs[code] = (allFIs[code] || 0) + 1;
                 }
@@ -277,12 +292,12 @@ const PatentAnalysisApp = () => {
       }
 
       // 会社別年次分析
-      const companyYearAnalysis = {};
+      const companyYearAnalysis = {} as any
       if (applicantColumn) {
-        data.forEach(row => {
+        data.forEach((row: any) => {
           if (row.Year && row[applicantColumn]) {
-            const companies = row[applicantColumn].split(/[;,\n]/).map(c => c.trim()).filter(c => c);
-            companies.forEach(company => {
+            const companies = row[applicantColumn].split(/[;,\n]/).map((c: any) => c.trim()).filter((c: any) => c);
+            companies.forEach((company: string) => {
               if (!companyYearAnalysis[company]) {
                 companyYearAnalysis[company] = {};
               }
@@ -293,16 +308,16 @@ const PatentAnalysisApp = () => {
       }
 
       // FI別年次分析
-      const fiYearAnalysis = {};
+      const fiYearAnalysis = {} as any
       if (fiColumn) {
-        data.forEach(row => {
+        data.forEach((row: any) => {
           if (row.Year && row[fiColumn]) {
-            const fiCodes = row[fiColumn].split(/[;,\n]/).map(code => {
+            const fiCodes = row[fiColumn].split(/[;,\n]/).map((code: string) => {
               const trimmed = code.trim();
               return trimmed.length > 6 ? trimmed.substring(0, 6).replace(/[\/\-]$/, '') : trimmed;
-            }).filter(code => code);
+            }).filter((code: string) => code);
             
-            fiCodes.forEach(code => {
+            fiCodes.forEach((code: string) => {
               if (code) {
                 if (!fiYearAnalysis[code]) {
                   fiYearAnalysis[code] = {};
@@ -325,38 +340,41 @@ const PatentAnalysisApp = () => {
         hasApplicantData: !!applicantColumn,
         hasFIData: !!fiColumn
       });
-    } catch (err) {
-      setError('データ解析中にエラーが発生しました: ' + err.message);
+    } catch (err: any) {
+      setError('データ解析中にエラーが発生しました: ' + err?.message);
       console.error('Analysis error:', err);
     }
   };
 
   // トップNデータを取得（社名を折り返しで表示）
-  const getTopN = (data, n = 10) => {
+  const getTopN = (data: Record<string, number>, n = 10) => {
     return Object.entries(data)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, n)
-      .map(([name, value]) => ({ 
-        name: wrapText(name, 25), 
+      .map(([name, value]) => ({
+        name: wrapText(name, 25),
         originalName: name,
-        value 
+        value,
       }));
   };
+  
 
   // 年次データを取得
-  const getYearData = (data) => {
+  const getYearData = (data: any) => {
     return Object.entries(data)
       .sort(([a], [b]) => parseInt(a) - parseInt(b))
       .map(([year, count]) => ({ year: parseInt(year), count }));
   };
 
   // 時系列データを取得
-  const getTimeSeriesData = (yearAnalysis, topItems) => {
-    const years = [...new Set(Object.values(yearAnalysis).flatMap(Object.keys))].sort((a, b) => parseInt(a) - parseInt(b));
-    
+  const getTimeSeriesData = (yearAnalysis: any, topItems: any) => {
+    const years = [...new Set(
+      Object.values(yearAnalysis).flatMap((obj: any) => Object.keys(obj))
+    )].sort((a, b) => parseInt(a) - parseInt(b));
+        
     return years.map(year => {
-      const dataPoint = { year: parseInt(year) };
-      topItems.forEach(item => {
+      const dataPoint = { year: parseInt(year) } as any
+      topItems.forEach((item: any) => {
         dataPoint[item.originalName || item.name] = yearAnalysis[item.originalName || item.name]?.[year] || 0;
       });
       return dataPoint;
@@ -400,7 +418,7 @@ const PatentAnalysisApp = () => {
             />
             {selectedFile && (
               <p className="mt-4 text-sm text-gray-600 bg-gray-100 rounded px-3 py-2 inline-block">
-                選択されたファイル: {selectedFile.name}
+                選択されたファイル: {selectedFile?.name}
               </p>
             )}
           </div>
@@ -458,7 +476,9 @@ const PatentAnalysisApp = () => {
         {analysisResults && (
           <div className="space-y-8">
             {/* 年次出願件数推移 */}
-            <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['year-trend'] = el}>
+            <div className="bg-white rounded-xl shadow-lg p-6" ref={el => {
+                chartRefs.current['year-trend'] = el;
+              }}>
               <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                 <TrendingUp className="mr-2 h-6 w-6 text-blue-600" />
                 出願件数の推移
@@ -484,7 +504,12 @@ const PatentAnalysisApp = () => {
 
             {/* 筆頭会社トップ10 */}
             {analysisResults.hasApplicantData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['leading-companies'] = el}>
+              <div className="bg-white rounded-xl shadow-lg p-6" 
+              ref={el => {
+                chartRefs.current['leading-companies'] = el;
+                // 返り値は明示的に返さない（undefined）
+              }}
+              >
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <BarChart3 className="mr-2 h-6 w-6 text-green-600" />
                   筆頭会社トップ10
@@ -497,11 +522,11 @@ const PatentAnalysisApp = () => {
                       dataKey="name" 
                       type="category" 
                       width={300} 
-                      tick={<CustomYAxisTick />}
+                      tick={CustomYAxisTick}
                       interval={0}
                     />
                     <Tooltip 
-                      formatter={(value, name, props) => [value, props.payload.originalName]}
+                      formatter={(value: any, name: string, props: any) => [value, props.payload.originalName]}
                     />
                     <Bar dataKey="value" fill="#f59e0b" />
                   </BarChart>
@@ -511,7 +536,7 @@ const PatentAnalysisApp = () => {
 
             {/* 全会社トップ10 */}
             {analysisResults.hasApplicantData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['all-companies'] = el}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['all-companies'] = el}}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <BarChart3 className="mr-2 h-6 w-6 text-blue-600" />
                   全体会社トップ10
@@ -524,11 +549,11 @@ const PatentAnalysisApp = () => {
                       dataKey="name" 
                       type="category" 
                       width={300} 
-                      tick={<CustomYAxisTick />}
+                      tick={CustomYAxisTick}
                       interval={0}
                     />
                     <Tooltip 
-                      formatter={(value, name, props) => [value, props.payload.originalName]}
+                      formatter={(value: any, name: string, props: any) => [value, props.payload.originalName]}
                     />
                     <Bar dataKey="value" fill="#3b82f6" />
                   </BarChart>
@@ -538,7 +563,7 @@ const PatentAnalysisApp = () => {
 
             {/* 筆頭会社円グラフ */}
             {analysisResults.hasApplicantData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['leading-companies-pie'] = el}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['leading-companies-pie'] = el}}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <Target className="mr-2 h-6 w-6 text-purple-600" />
                   筆頭会社の割合
@@ -552,13 +577,13 @@ const PatentAnalysisApp = () => {
                       outerRadius={150}
                       fill="#8884d8"
                       dataKey="value"
-                      label={({originalName, percent}) => `${wrapText(originalName, 15)} ${(percent * 100).toFixed(1)}%`}
+                      label={({originalName, percent}: PieLabelProps) => `${wrapText(originalName, 15)} ${((percent || 0) * 100).toFixed(1)}%`}
                     >
                       {getTopN(analysisResults.leadingCompanies, 10).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value, name, props) => [value, props.payload.originalName]} />
+                    <Tooltip formatter={(value: any, name: string, props: any) => [value, props.payload.originalName]} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -566,7 +591,7 @@ const PatentAnalysisApp = () => {
 
             {/* 筆頭分類コードトップ10 */}
             {analysisResults.hasFIData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['leading-fi'] = el}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['leading-fi'] = el}}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <BarChart3 className="mr-2 h-6 w-6 text-red-600" />
                   筆頭分類コードトップ10
@@ -576,7 +601,7 @@ const PatentAnalysisApp = () => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={80} />
-                    <Tooltip formatter={(value, name, props) => [value, props.payload.originalName]} />
+                    <Tooltip formatter={(value: any, name: string, props: any) => [value, props.payload.originalName]} />
                     <Bar dataKey="value" fill="#ef4444" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -585,7 +610,12 @@ const PatentAnalysisApp = () => {
 
             {/* 全分類コードトップ10 */}
             {analysisResults.hasFIData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['all-fi'] = el}>
+              <div 
+                className="bg-white rounded-xl shadow-lg p-6" 
+                ref={(el) => {
+                  chartRefs.current['leading-companies'] = el
+                }}
+              >
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <BarChart3 className="mr-2 h-6 w-6 text-indigo-600" />
                   全分類コードトップ10
@@ -595,7 +625,7 @@ const PatentAnalysisApp = () => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={80} />
-                    <Tooltip formatter={(value, name, props) => [value, props.payload.originalName]} />
+                    <Tooltip formatter={(value: any, name: string, props: any) => [value, props.payload.originalName]} />
                     <Bar dataKey="value" fill="#6366f1" />
                   </BarChart>
                 </ResponsiveContainer>
@@ -604,7 +634,11 @@ const PatentAnalysisApp = () => {
 
             {/* 会社別時系列分析 */}
             {analysisResults.hasApplicantData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['company-timeline'] = el}>
+              <div className="bg-white rounded-xl shadow-lg p-6" 
+                ref={(el) => {
+                  chartRefs.current['company-timeline'] = el
+                }}
+              >
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <TrendingUp className="mr-2 h-6 w-6 text-green-600" />
                   会社別出願件数の時系列分析
@@ -635,7 +669,7 @@ const PatentAnalysisApp = () => {
 
             {/* 分類コード別時系列分析 */}
             {analysisResults.hasFIData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => chartRefs.current['fi-timeline'] = el}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['fi-timeline'] = el}}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <TrendingUp className="mr-2 h-6 w-6 text-purple-600" />
                   分類コード別出願件数の時系列分析
