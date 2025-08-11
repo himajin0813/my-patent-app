@@ -1,4 +1,3 @@
-"use client";
 import React, { useState, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Upload, BarChart3, TrendingUp, Target } from 'lucide-react';
@@ -87,18 +86,18 @@ const PatentAnalysisApp = () => {
           }
           
           // ヘッダーを取得（J-PlatPat形式）
-          const headers = data[0] as string[];
+          const headers = data[0];
           console.log('Headers:', headers); // デバッグ用
           
           // J-PlatPatの主要な列名を検索
           const applicationDateColumn = headers.find(col => 
-            col.includes('出願日') || col.includes('Application Date') || col.includes('出願年月日')
+            col && (col.includes('出願日') || col.includes('Application Date') || col.includes('出願年月日'))
           );
           const applicantColumn = headers.find(col => 
-            col.includes('出願人') || col.includes('Applicant') || col.includes('権利者')
+            col && (col.includes('出願人') || col.includes('Applicant') || col.includes('権利者'))
           );
           const fiColumn = headers.find(col => 
-            col.includes('FI') || col.includes('F-term') || col.includes('分類')
+            col && (col.includes('FI') || col.includes('F-term') || col.includes('分類'))
           );
           
           console.log('Found columns:', { applicationDateColumn, applicantColumn, fiColumn }); // デバッグ用
@@ -204,10 +203,10 @@ const PatentAnalysisApp = () => {
     try {
       // 列名を特定
       const applicantColumn = headers.find(col => 
-        col.includes('出願人') || col.includes('Applicant') || col.includes('権利者')
+        col && (col.includes('出願人') || col.includes('Applicant') || col.includes('権利者'))
       );
       const fiColumn = headers.find(col => 
-        col.includes('FI') || col.includes('F-term') || col.includes('分類')
+        col && (col.includes('FI') || col.includes('F-term') || col.includes('分類'))
       );
 
       // 年別出願件数
