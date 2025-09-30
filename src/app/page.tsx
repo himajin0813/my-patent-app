@@ -17,27 +17,30 @@ type AnalysisResults = {
   hasFIData: boolean;
 };
 
-
-const PatentAnalysisApp = () => {
+const PatentAnalysisApp: React.FC = () => {
   const [csvData, setCsvData] = useState<any[] | null>(null);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<any>(null);
-  const [selectedFile, setSelectedFile] = useState<any | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chartRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // ワードクラウド用ステート
+  const [wordcloudImage, setWordcloudImage] = useState<string | null>(null);
+  const [wcLoading, setWcLoading] = useState(false);
 
   // 社名を折り返し表示する関数
   const wrapText = (text: string, maxLength = 20) => {
     if (!text || text.length <= maxLength) return text;
     
     const words = text.split(/[\s\-\/・]/);
-    const lines = [];
+    const lines: string[] = [];
     let currentLine = '';
     
     for (let word of words) {
-      if ((currentLine + word).length <= maxLength) {
+      if ((currentLine + (currentLine ? ' ' : '') + word).length <= maxLength) {
         currentLine = currentLine ? currentLine + ' ' + word : word;
       } else {
         if (currentLine) {
@@ -62,7 +65,7 @@ const PatentAnalysisApp = () => {
   };
 
   // カスタムY軸ティックコンポーネント
-  const CustomYAxisTick = ({ x, y, payload }: { x: number, y: number, payload: { value: number } }) => {
+  const CustomYAxisTick: React.FC<{ x: number; y: number; payload: { value: string } }> = ({ x, y, payload }) => {
     const lines = String(payload.value).split('\n');
     return (
       <g transform={`translate(${x},${y})`}>
@@ -83,28 +86,61 @@ const PatentAnalysisApp = () => {
     );
   };
 
+  // --- ワードクラウド生成用 API 呼び出し ---
+  const generateWordcloud = async (file: File) => {
+    setWcLoading(true);
+    setWordcloudImage(null);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("https://python-word-cloud.onrender.com", {
+        method: "POST",
+        body: formData,
+      });
+
+      // 応答の JSON をパース
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setWordcloudImage(data.image); // data:image/png;base64,... をそのままセット
+      } else {
+        // APIが400/500などを返した場合のエラーメッセージ処理
+        const msg = data?.error || "ワードクラウド生成に失敗しました";
+        setError(msg);
+        console.error("Wordcloud API error:", data);
+      }
+    } catch (err) {
+      console.error("Wordcloud fetch error:", err);
+      setError("ワードクラウド生成中に通信エラーが発生しました");
+    } finally {
+      setWcLoading(false);
+    }
+  };
+
   // CSVファイルの読み込み
   const handleFileUpload = (event: any) => {
-    const file = event.target.files?.[0];
+    const file: File | undefined = event.target.files?.[0];
     if (!file) return;
 
     setSelectedFile(file);
     setLoading(true);
     setError(null);
+    setWordcloudImage(null);
 
     Papa.parse(file, {
-      complete: (results) => {
+      complete: (results: any) => {
         try {
           const data = results.data;
-          if (data.length === 0) {
+          if (!data || data.length === 0) {
             throw new Error('CSVファイルが空です');
           }
           
           // ヘッダーを取得（J-PlatPat形式）
-          const headers = data[0] as any
-          console.log('Headers:', headers); // デバッグ用
-          
-          // J-PlatPatの主要な列名を検索
+          const headers = data[0] as any;
+          // J-PlatPatの主要な列名を検索（ヘッダー文字列そのものを利用する実装のため、header:falseで読み込んでいる）
           const applicationDateColumn = headers.find((col: string) => 
             col && (col.includes('出願日') || col.includes('Application Date') || col.includes('出願年月日'))
           );
@@ -114,36 +150,33 @@ const PatentAnalysisApp = () => {
           const fiColumn = headers.find((col: string) => 
             col && (col.includes('FI') || col.includes('F-term') || col.includes('分類'))
           );
-          
-          console.log('Found columns:', { applicationDateColumn, applicantColumn, fiColumn }); // デバッグ用
-          
+
+          console.log('Found columns:', { applicationDateColumn, applicantColumn, fiColumn });
+
           if (!applicationDateColumn) {
             throw new Error('出願日列が見つかりません。CSVファイルがJ-PlatPat形式であることを確認してください。');
           }
 
-          // データを処理
+          // データをオブジェクト配列に変換（ヘッダー行をキーにする）
           const processedData = data.slice(1).map((row: any) => {
-            const obj = {} as any
+            const obj: any = {};
             headers.forEach((header: any, headerIndex: number) => {
               obj[header] = row[headerIndex] || '';
             });
             return obj;
-          }).filter(row => row[applicationDateColumn]) // 出願日がある行のみ
-
-          console.log('Processed data sample:', processedData[0]); // デバッグ用
+          }).filter((row: any) => row[applicationDateColumn]);
 
           // 年を追加
-          processedData.forEach(row => {
+          processedData.forEach((row: any) => {
             const dateStr = row[applicationDateColumn];
-            let date;
-            
-            // J-PlatPatの日付形式を解析（YYYY/MM/DD, YYYY-MM-DD, YYYYMMDDなど）
-            if (dateStr.includes('/')) {
+            let date: Date;
+            if (typeof dateStr !== 'string') {
+              date = new Date(String(dateStr));
+            } else if (dateStr.includes('/')) {
               date = new Date(dateStr);
             } else if (dateStr.includes('-')) {
               date = new Date(dateStr);
-            } else if (dateStr.length === 8) {
-              // YYYYMMDD形式
+            } else if (dateStr.length === 8 && /^\d{8}$/.test(dateStr)) {
               const year = dateStr.substring(0, 4);
               const month = dateStr.substring(4, 6);
               const day = dateStr.substring(6, 8);
@@ -159,6 +192,10 @@ const PatentAnalysisApp = () => {
 
           setCsvData(processedData);
           analyzeData(processedData, headers);
+
+          // 発明の名称列に限定してワードクラウドを生成（FastAPIにファイルを送る）
+          // あなたのバックエンドはCSV内の「発明の名称」列を参照する実装なので、実際にファイルをそのまま送ればOK
+          generateWordcloud(file);
         } catch (err: any) {
           setError(err?.message || "");
           console.error('Error processing CSV:', err);
@@ -209,14 +246,13 @@ const PatentAnalysisApp = () => {
   // アップロードエリアクリック
   const handleUploadAreaClick = () => {
     if (fileInputRef.current) {
-      (fileInputRef.current as any).click();
+      fileInputRef.current.click();
     }
   };
 
-  // データ解析
+  // データ解析（既存ロジック）
   const analyzeData = (data: any, headers: any) => {
     try {
-      // 列名を特定
       const applicantColumn = headers.find((col: string) => 
         col && (col.includes('出願人') || col.includes('Applicant') || col.includes('権利者'))
       );
@@ -224,31 +260,24 @@ const PatentAnalysisApp = () => {
         col && (col.includes('FI') || col.includes('F-term') || col.includes('分類'))
       );
 
-      // 年別出願件数
-      const yearCounts = {} as any
+      const yearCounts: Record<string, number> = {};
       data.forEach((row: any) => {
         if (row.Year) {
           yearCounts[row.Year] = (yearCounts[row.Year] || 0) + 1;
         }
       });
 
-      // 筆頭会社分析
-      const leadingCompanies = {} as any
-      const allCompanies = {} as any
+      const leadingCompanies: Record<string, number> = {};
+      const allCompanies: Record<string, number> = {};
       
       if (applicantColumn) {
         data.forEach((row: any) => {
           const applicant = row[applicantColumn];
           if (applicant) {
-            // セミコロン、カンマ、改行などで分割
             const companies = applicant.split(/[;,\n]/).map((c: string) => c.trim()).filter((c: string) => c);
             if (companies.length > 0) {
               const leadingCompany = companies[0];
-              
-              // 筆頭会社
               leadingCompanies[leadingCompany] = (leadingCompanies[leadingCompany] || 0) + 1;
-              
-              // 全会社
               companies.forEach((company: any) => {
                 allCompanies[company] = (allCompanies[company] || 0) + 1;
               });
@@ -257,30 +286,23 @@ const PatentAnalysisApp = () => {
         });
       }
 
-      // FI/分類分析
-      const leadingFIs = {} as any
-      const allFIs = {} as any
+      const leadingFIs: Record<string, number> = {};
+      const allFIs: Record<string, number> = {};
       
       if (fiColumn) {
         data.forEach((row: any) => {
           const fi = row[fiColumn];
           if (fi) {
-            // セミコロン、カンマ、改行などで分割
             const fiCodes = fi.split(/[;,\n]/).map((code: string) => {
               const trimmed = code.trim();
-              // FIコードの先頭6文字を取得（末尾の記号を除去）
               return trimmed.length > 6 ? trimmed.substring(0, 6).replace(/[\/\-]$/, '') : trimmed;
             }).filter((code: string) => code);
             
             if (fiCodes.length > 0) {
               const leadingFI = fiCodes[0];
-              
-              // 筆頭FI
               if (leadingFI) {
                 leadingFIs[leadingFI] = (leadingFIs[leadingFI] || 0) + 1;
               }
-              
-              // 全FI
               fiCodes.forEach((code: string) => {
                 if (code) {
                   allFIs[code] = (allFIs[code] || 0) + 1;
@@ -291,8 +313,7 @@ const PatentAnalysisApp = () => {
         });
       }
 
-      // 会社別年次分析
-      const companyYearAnalysis = {} as any
+      const companyYearAnalysis: Record<string, Record<string, number>> = {};
       if (applicantColumn) {
         data.forEach((row: any) => {
           if (row.Year && row[applicantColumn]) {
@@ -307,8 +328,7 @@ const PatentAnalysisApp = () => {
         });
       }
 
-      // FI別年次分析
-      const fiYearAnalysis = {} as any
+      const fiYearAnalysis: Record<string, Record<string, number>> = {};
       if (fiColumn) {
         data.forEach((row: any) => {
           if (row.Year && row[fiColumn]) {
@@ -373,7 +393,7 @@ const PatentAnalysisApp = () => {
     )].sort((a, b) => parseInt(a) - parseInt(b));
         
     return years.map(year => {
-      const dataPoint = { year: parseInt(year) } as any
+      const dataPoint: any = { year: parseInt(year) };
       topItems.forEach((item: any) => {
         dataPoint[item.originalName || item.name] = yearAnalysis[item.originalName || item.name]?.[year] || 0;
       });
@@ -437,6 +457,23 @@ const PatentAnalysisApp = () => {
               <p className="mt-4 text-gray-600">処理中...</p>
             </div>
           )}
+
+          {/* ワードクラウド生成状態 */}
+          <div className="mt-4">
+            {wcLoading && (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500 mx-auto"></div>
+                <p className="mt-2 text-gray-600">ワードクラウドを生成しています...</p>
+              </div>
+            )}
+
+            {wordcloudImage && (
+              <div className="mt-6 text-center">
+                <h2 className="text-lg font-semibold mb-2">ワードクラウド（発明の名称）</h2>
+                <img src={wordcloudImage} alt="Word Cloud" className="mx-auto rounded-lg shadow-md max-w-full" />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 分析結果の概要 */}
