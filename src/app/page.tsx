@@ -96,7 +96,7 @@ const PatentAnalysisApp: React.FC = () => {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://python-word-cloud.onrender.com", {
+      const res = await fetch("https://python-word-cloud.onrender.com/generate-wordcloud", {
         method: "POST",
         body: formData,
       });
