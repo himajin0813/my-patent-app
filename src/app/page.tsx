@@ -3,7 +3,6 @@ import { BarChart3, Target, TrendingUp, Upload } from 'lucide-react';
 import Papa from 'papaparse';
 import React, { useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { PieLabelProps } from '../../node_modules/recharts/types/polar/Pie';
 
 type AnalysisResults = {
   yearCounts: Record<string, number>;
@@ -21,7 +20,7 @@ const PatentAnalysisApp: React.FC = () => {
   const [csvData, setCsvData] = useState<any[] | null>(null);
   const [analysisResults, setAnalysisResults] = useState<AnalysisResults | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -65,7 +64,7 @@ const PatentAnalysisApp: React.FC = () => {
   };
 
   // カスタムY軸ティックコンポーネント
-  const CustomYAxisTick: React.FC<{ x: number; y: number; payload: { value: string } }> = ({ x, y, payload }) => {
+  const CustomYAxisTick = ({ x, y, payload }: { x: number; y: number; payload: { value: string } }): React.ReactElement<SVGElement> => {
     const lines = String(payload.value).split('\n');
     return (
       <g transform={`translate(${x},${y})`}>
@@ -88,7 +87,7 @@ const PatentAnalysisApp: React.FC = () => {
 
   // --- ワードクラウド生成用 API 呼び出し ---
   const generateWordcloud = async (file: File) => {
-    console.log("generateWordcloud")
+    console.log("generateWordcloud");
     setWcLoading(true);
     setWordcloudImage(null);
     setError(null);
@@ -104,7 +103,7 @@ const PatentAnalysisApp: React.FC = () => {
 
       // 応答の JSON をパース
       const data = await res.json();
-      console.log(data)
+      console.log(data);
 
       if (res.ok && data.success) { 
         setWordcloudImage(data.image); // data:image/png;base64,... をそのままセット
@@ -123,10 +122,7 @@ const PatentAnalysisApp: React.FC = () => {
   };
 
   // CSVファイルの読み込み
-  const handleFileUpload = (event: any) => {
-    const file: File | undefined = event.target.files?.[0];
-    if (!file) return;
-
+  const processFile = (file: File) => {
     setSelectedFile(file);
     setLoading(true);
     setError(null);
@@ -195,13 +191,12 @@ const PatentAnalysisApp: React.FC = () => {
           setCsvData(processedData);
           analyzeData(processedData, headers);
 
-          console.log("processedData", processedData)
+          console.log("processedData", processedData);
 
           // 発明の名称列に限定してワードクラウドを生成（FastAPIにファイルを送る）
-          // あなたのバックエンドはCSV内の「発明の名称」列を参照する実装なので、実際にファイルをそのまま送ればOK
           generateWordcloud(file);
         } catch (err: any) {
-          setError(err?.message || "");
+          setError(err?.message || "エラーが発生しました");
           console.error('Error processing CSV:', err);
         } finally {
           setLoading(false);
@@ -215,18 +210,25 @@ const PatentAnalysisApp: React.FC = () => {
     });
   };
 
+  // ファイル入力からのアップロード処理
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file: File | undefined = event.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  };
+
   // ドラッグ&ドロップ処理
-  const handleDragOver = (e: any) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(true);
   };
 
-  const handleDragLeave = (e: any) => {
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: any) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
     
@@ -234,13 +236,7 @@ const PatentAnalysisApp: React.FC = () => {
     if (files.length > 0) {
       const file = files[0];
       if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-        // FileListを作成してhandleFileUploadに渡す
-        const mockEvent = {
-          target: {
-            files: [file]
-          }
-        };
-        handleFileUpload(mockEvent);
+        processFile(file);
       } else {
         setError('CSVファイルのみアップロード可能です');
       }
@@ -381,17 +377,16 @@ const PatentAnalysisApp: React.FC = () => {
         value,
       }));
   };
-  
 
   // 年次データを取得
-  const getYearData = (data: any) => {
+  const getYearData = (data: Record<string, number>) => {
     return Object.entries(data)
       .sort(([a], [b]) => parseInt(a) - parseInt(b))
       .map(([year, count]) => ({ year: parseInt(year), count }));
   };
 
   // 時系列データを取得
-  const getTimeSeriesData = (yearAnalysis: any, topItems: any) => {
+  const getTimeSeriesData = (yearAnalysis: Record<string, Record<string, number>>, topItems: any[]) => {
     const years = [...new Set(
       Object.values(yearAnalysis).flatMap((obj: any) => Object.keys(obj))
     )].sort((a, b) => parseInt(a) - parseInt(b));
@@ -548,7 +543,6 @@ const PatentAnalysisApp: React.FC = () => {
               <div className="bg-white rounded-xl shadow-lg p-6" 
               ref={el => {
                 chartRefs.current['leading-companies'] = el;
-                // 返り値は明示的に返さない（undefined）
               }}
               >
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
@@ -577,7 +571,7 @@ const PatentAnalysisApp: React.FC = () => {
 
             {/* 全会社トップ10 */}
             {analysisResults.hasApplicantData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['all-companies'] = el}}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['all-companies'] = el; }}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <BarChart3 className="mr-2 h-6 w-6 text-blue-600" />
                   全体会社トップ10
@@ -604,7 +598,7 @@ const PatentAnalysisApp: React.FC = () => {
 
             {/* 筆頭会社円グラフ */}
             {analysisResults.hasApplicantData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['leading-companies-pie'] = el}}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['leading-companies-pie'] = el; }}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <Target className="mr-2 h-6 w-6 text-purple-600" />
                   筆頭会社の割合
@@ -618,7 +612,7 @@ const PatentAnalysisApp: React.FC = () => {
                       outerRadius={150}
                       fill="#8884d8"
                       dataKey="value"
-                      label={({originalName, percent}: PieLabelProps) => `${wrapText(originalName, 15)} ${((percent || 0) * 100).toFixed(1)}%`}
+                      label={(entry: any) => `${wrapText(entry.originalName, 15)} ${(entry.percent * 100).toFixed(1)}%`}
                     >
                       {getTopN(analysisResults.leadingCompanies, 10).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
@@ -632,7 +626,7 @@ const PatentAnalysisApp: React.FC = () => {
 
             {/* 筆頭分類コードトップ10 */}
             {analysisResults.hasFIData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['leading-fi'] = el}}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['leading-fi'] = el; }}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <BarChart3 className="mr-2 h-6 w-6 text-red-600" />
                   筆頭分類コードトップ10
@@ -653,9 +647,7 @@ const PatentAnalysisApp: React.FC = () => {
             {analysisResults.hasFIData && (
               <div 
                 className="bg-white rounded-xl shadow-lg p-6" 
-                ref={(el) => {
-                  chartRefs.current['leading-companies'] = el
-                }}
+                ref={el => { chartRefs.current['all-fi'] = el; }}
               >
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <BarChart3 className="mr-2 h-6 w-6 text-indigo-600" />
@@ -676,9 +668,7 @@ const PatentAnalysisApp: React.FC = () => {
             {/* 会社別時系列分析 */}
             {analysisResults.hasApplicantData && (
               <div className="bg-white rounded-xl shadow-lg p-6" 
-                ref={(el) => {
-                  chartRefs.current['company-timeline'] = el
-                }}
+                ref={el => { chartRefs.current['company-timeline'] = el; }}
               >
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <TrendingUp className="mr-2 h-6 w-6 text-green-600" />
@@ -710,7 +700,7 @@ const PatentAnalysisApp: React.FC = () => {
 
             {/* 分類コード別時系列分析 */}
             {analysisResults.hasFIData && (
-              <div className="bg-white rounded-xl shadow-lg p-6" ref={(el) => {chartRefs.current['fi-timeline'] = el}}>
+              <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['fi-timeline'] = el; }}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
                   <TrendingUp className="mr-2 h-6 w-6 text-purple-600" />
                   分類コード別出願件数の時系列分析
