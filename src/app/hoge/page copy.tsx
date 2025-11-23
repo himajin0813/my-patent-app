@@ -88,7 +88,6 @@ const PatentAnalysisApp: React.FC = () => {
 
   // --- ワードクラウド生成用 API 呼び出し ---
   const generateWordcloud = async (file: File) => {
-    console.log("generateWordcloud")
     setWcLoading(true);
     setWordcloudImage(null);
     setError(null);
@@ -97,16 +96,15 @@ const PatentAnalysisApp: React.FC = () => {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("https://python-word-cloud.onrender.com/generate-wordcloud", {
+      const res = await fetch("http://127.0.0.1:8000/generate-wordcloud", {
         method: "POST",
         body: formData,
       });
 
       // 応答の JSON をパース
       const data = await res.json();
-      console.log(data)
 
-      if (res.ok && data.success) { 
+      if (res.ok && data.success) {
         setWordcloudImage(data.image); // data:image/png;base64,... をそのままセット
       } else {
         // APIが400/500などを返した場合のエラーメッセージ処理
@@ -194,8 +192,6 @@ const PatentAnalysisApp: React.FC = () => {
 
           setCsvData(processedData);
           analyzeData(processedData, headers);
-
-          console.log("processedData", processedData)
 
           // 発明の名称列に限定してワードクラウドを生成（FastAPIにファイルを送る）
           // あなたのバックエンドはCSV内の「発明の名称」列を参照する実装なので、実際にファイルをそのまま送ればOK
