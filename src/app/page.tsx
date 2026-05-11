@@ -235,7 +235,6 @@ const CofilingNetwork: React.FC<{
         const a = pos[e.source], b = pos[e.target];
         if (!a || !b) return;
         const dx = b.x - a.x, dy = b.y - a.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
         const strength = (e.count / maxEdge) * 0.08 * alpha;
         const fx = dx * strength, fy = dy * strength;
         a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
@@ -521,7 +520,6 @@ const PatentAnalysisApp: React.FC = () => {
   };
   const [filters, setFilters] = useState<FilterConfig>(EMPTY_FILTER);
   const [appliedFilters, setAppliedFilters] = useState<FilterConfig>(EMPTY_FILTER);
-  const [compareCompanies, setCompareCompanies] = useState<string[]>([]);
   const [companySearch, setCompanySearch] = useState('');
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -589,7 +587,7 @@ const PatentAnalysisApp: React.FC = () => {
   const processFile = (file: File) => {
     setSelectedFile(file); setLoading(true); setError(null); setWordcloudImage(null);
     setSortConfig(null); setCurrentPage(1); setTableSearch('');
-    setCompareCompanies([]); setCompanySearch('');
+    setCompanySearch('');
     Papa.parse(file, {
       complete: (results: any) => {
         try {
@@ -831,6 +829,7 @@ const PatentAnalysisApp: React.FC = () => {
                   )}
                 </div>
                 {wcLoading && <div className="text-center py-6"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-500 mx-auto"></div><p className="mt-2 text-gray-600">ワードクラウドを生成しています...</p></div>}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 {wordcloudImage && <img src={wordcloudImage} alt="Word Cloud" className="mx-auto rounded-lg shadow-md max-w-full" />}
               </div>
             )}
