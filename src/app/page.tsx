@@ -1,8 +1,13 @@
 "use client";
-import { BarChart3, ChevronDown, ChevronUp, Download, Filter, Search, Share2, Table, Target, TrendingUp, Upload, X } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronUp, Download, Eye, FileText, Filter, Search, Share2, Table, Target, TrendingUp, Upload, X } from 'lucide-react';
 import Papa from 'papaparse';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { Area, AreaChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { BrandHeader } from './BrandHeader';
+import { CofilingNetwork } from './CofilingNetwork';
+import { InsightsPanel } from './InsightsPanel';
+import { RankList } from './RankList';
+import { TechMap } from './TechMap';
 
 // ===== FI サブクラス 日本語対応表（A〜H全セクション） =====
 const FI_SUBCLASS_JA: Record<string, string> = {
@@ -137,10 +142,8 @@ const FI_SUBCLASS_JA: Record<string, string> = {
 const getFiDescription = (fiCode: string): string => {
   if (!fiCode) return '';
   const normalized = fiCode.replace(/\s/g, '').toUpperCase();
-  // 4文字サブクラス（例: H01L）
   const sub4 = normalized.substring(0, 4);
   if (FI_SUBCLASS_JA[sub4]) return FI_SUBCLASS_JA[sub4];
-  // 3文字（例: A01）
   const sub3 = normalized.substring(0, 3);
   const found = Object.entries(FI_SUBCLASS_JA).find(([k]) => k.startsWith(sub3));
   return found ? found[1] : '';
@@ -178,153 +181,6 @@ type ActiveTab = 'charts' | 'table';
 
 const COLORS = ['#0088FE','#00C49F','#FFBB28','#FF8042','#8884D8','#82CA9D','#FFC658','#FF7C7C','#8DD1E1','#D084D0'];
 const PAGE_SIZE = 50;
-const NETWORK_TOP_N = 10;
-
-// ===== 共同出願ネットワーク（D3不使用・自前シミュレーション） =====
-const CofilingNetwork: React.FC<{
-  edges: { source: string; target: string; count: number }[];
-  allCompanies: Record<string, number>;
-}> = ({ edges, allCompanies }) => {
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
-  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
-  const animRef = useRef<number | null>(null);
-  const posRef = useRef<Record<string, { x: number; y: number; vx: number; vy: number }>>({});
-
-  const topCompanies = useMemo(() =>
-    new Set(Object.entries(allCompanies).sort(([,a],[,b]) => b - a).slice(0, NETWORK_TOP_N).map(([n]) => n)),
-    [allCompanies]
-  );
-  const nodes = useMemo(() =>
-    Array.from(topCompanies).map(id => ({ id, count: allCompanies[id] || 0 })),
-    [topCompanies, allCompanies]
-  );
-  const filteredEdges = useMemo(() =>
-    edges.filter(e => topCompanies.has(e.source) && topCompanies.has(e.target)),
-    [edges, topCompanies]
-  );
-
-  useEffect(() => {
-    if (!nodes.length) return;
-    const W = 700, H = 420;
-    const init: Record<string, { x: number; y: number; vx: number; vy: number }> = {};
-    nodes.forEach((n, i) => {
-      const angle = (i / nodes.length) * 2 * Math.PI;
-      init[n.id] = { x: W / 2 + 160 * Math.cos(angle), y: H / 2 + 140 * Math.sin(angle), vx: 0, vy: 0 };
-    });
-    posRef.current = init;
-    const maxEdge = filteredEdges.length > 0 ? Math.max(...filteredEdges.map(e => e.count)) : 1;
-    let iter = 0;
-    const tick = () => {
-      const pos = posRef.current;
-      const alpha = Math.max(0.01, 0.3 * Math.pow(0.92, iter));
-      iter++;
-      const ids = Object.keys(pos);
-      // 反発力
-      for (let i = 0; i < ids.length; i++) {
-        for (let j = i + 1; j < ids.length; j++) {
-          const a = pos[ids[i]], b = pos[ids[j]];
-          const dx = b.x - a.x, dy = b.y - a.y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const force = (6000 / (dist * dist)) * alpha;
-          const fx = (dx / dist) * force, fy = (dy / dist) * force;
-          a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
-        }
-      }
-      // 引力（エッジ）
-      filteredEdges.forEach(e => {
-        const a = pos[e.source], b = pos[e.target];
-        if (!a || !b) return;
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const strength = (e.count / maxEdge) * 0.08 * alpha;
-        const fx = dx * strength, fy = dy * strength;
-        a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
-      });
-      // 中心引力
-      ids.forEach(id => {
-        const p = pos[id];
-        p.vx += (W / 2 - p.x) * 0.005 * alpha;
-        p.vy += (H / 2 - p.y) * 0.005 * alpha;
-      });
-      // 更新
-      ids.forEach(id => {
-        const p = pos[id];
-        p.vx *= 0.85; p.vy *= 0.85;
-        p.x = Math.max(60, Math.min(W - 60, p.x + p.vx));
-        p.y = Math.max(40, Math.min(H - 40, p.y + p.vy));
-      });
-      setPositions(Object.fromEntries(ids.map(id => [id, { x: pos[id].x, y: pos[id].y }])));
-      if (iter < 150) animRef.current = requestAnimationFrame(tick);
-    };
-    animRef.current = requestAnimationFrame(tick);
-    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
-  }, [nodes, filteredEdges]);
-
-  if (!nodes.length || !filteredEdges.length) {
-    return (
-      <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-lg">
-        共同出願データなし（出願人欄に複数社が記載されているレコードが必要です）
-      </div>
-    );
-  }
-
-  const maxCount = Math.max(...nodes.map(n => n.count));
-  const maxEdge = Math.max(...filteredEdges.map(e => e.count));
-
-  return (
-    <div className="relative">
-      <svg viewBox="0 0 700 420" className="w-full border border-gray-100 rounded-lg bg-gray-50">
-        {filteredEdges.map((e, i) => {
-          const a = positions[e.source], b = positions[e.target];
-          if (!a || !b) return null;
-          const w = 1.5 + (e.count / maxEdge) * 7;
-          const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-          return (
-            <g key={i}>
-              <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke="#94a3b8" strokeWidth={w} strokeOpacity={0.55}
-                style={{ cursor: 'pointer' }}
-                onMouseEnter={() => setTooltip({ x: mx, y: my, text: `${e.source} ↔ ${e.target}：${e.count}件` })}
-                onMouseLeave={() => setTooltip(null)}
-              />
-              {w > 4 && (
-                <text x={mx} y={my - 5} textAnchor="middle" fontSize="9" fill="#475569">{e.count}件</text>
-              )}
-            </g>
-          );
-        })}
-        {nodes.map((n, i) => {
-          const p = positions[n.id];
-          if (!p) return null;
-          const r = 14 + (n.count / maxCount) * 24;
-          const color = COLORS[i % COLORS.length];
-          const label = n.id.length > 12 ? n.id.substring(0, 12) + '…' : n.id;
-          return (
-            <g key={n.id} style={{ cursor: 'pointer' }}
-              onMouseEnter={() => setTooltip({ x: p.x, y: p.y - r - 8, text: `${n.id}：${n.count.toLocaleString()}件` })}
-              onMouseLeave={() => setTooltip(null)}
-            >
-              <circle cx={p.x} cy={p.y} r={r} fill={color} fillOpacity={0.55} stroke="white" strokeWidth={2.5} />
-              <text x={p.x} y={p.y + 1} textAnchor="middle" dominantBaseline="middle"
-                fontSize={Math.max(8, Math.min(11, r * 0.55))} fill="#1e293b" fontWeight="700">
-                {label}
-              </text>
-            </g>
-          );
-        })}
-        {tooltip && (
-          <g>
-            <rect x={tooltip.x - tooltip.text.length * 3.5 - 4} y={tooltip.y - 16}
-              width={tooltip.text.length * 7 + 8} height={22} rx={5} fill="rgba(15,23,42,0.88)" />
-            <text x={tooltip.x} y={tooltip.y - 3} textAnchor="middle" fontSize="11" fill="white">{tooltip.text}</text>
-          </g>
-        )}
-      </svg>
-      <p className="text-xs text-gray-400 mt-2 text-center">
-        ※ 円の大きさ = 出願件数，線の太さ = 共同出願件数。上位{NETWORK_TOP_N}社を表示。ノードにマウスを当てると詳細が出ます。
-      </p>
-    </div>
-  );
-};
 
 // ===== FI ランキングテーブル（日本語説明付き） =====
 const FiRankingTable: React.FC<{
@@ -345,7 +201,7 @@ const FiRankingTable: React.FC<{
             <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">技術分野（日本語）</th>
             <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">件数</th>
             <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">割合</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">バー</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -377,8 +233,56 @@ const FiRankingTable: React.FC<{
   );
 };
 
+// ===== 出願人名の表記ゆれ統合 =====
+type NameGroup = { display: string; variants: { name: string; count: number }[]; total: number };
+
+const JP_LEGAL = /株式会社|有限会社|合同会社|合資会社|合名会社|一般社団法人|一般財団法人|公益社団法人|公益財団法人|国立研究開発法人|独立行政法人|\(株\)|\(有\)|\(合\)|\(同\)/g;
+const EN_LEGAL = /\b(?:CO|COMPANY|CORP|CORPORATION|INC|INCORPORATED|LTD|LIMITED|LLC|GMBH|PLC|AG|KK|KABUSHIKI\s+KAISHA)\b/g;
+
+// 比較用キー：全半角統一→大文字化→法人格を除去→記号・空白を除去
+const companyKey = (name: string): string => {
+  const k = name.normalize('NFKC').toUpperCase()
+    .replace(JP_LEGAL, '').replace(EN_LEGAL, '')
+    .replace(/[^\p{L}\p{N}]/gu, '');
+  return k || name;
+};
+
+// 出願人欄を1社ずつに分割（"CO., LTD." のカンマでは分割しない）
+const splitApplicants = (val: string, canon?: (s: string) => string): string[] => {
+  const protectedVal = String(val).replace(/,\s*(?=(?:LTD|INC|LLC|LIMITED|CORP|CORPORATION|CO)\b)/gi, '\u0000');
+  const names = protectedVal.split(/[;,\n]/).map(c => c.replace(/\u0000/g, ', ').trim()).filter(Boolean);
+  const mapped = canon ? names.map(canon) : names;
+  return Array.from(new Set(mapped));
+};
+
+const buildNameMap = (data: any[] | null, col: string | undefined, enabled: boolean) => {
+  const identity = { canon: (s: string) => s, groups: [] as NameGroup[] };
+  if (!enabled || !data || !col) return identity;
+  const counts: Record<string, number> = {};
+  data.forEach(row => {
+    const v = row[col];
+    if (!v) return;
+    splitApplicants(v).forEach(n => { counts[n] = (counts[n] || 0) + 1; });
+  });
+  const byKey: Record<string, { name: string; count: number }[]> = {};
+  Object.entries(counts).forEach(([name, count]) => {
+    const k = companyKey(name);
+    if (!byKey[k]) byKey[k] = [];
+    byKey[k].push({ name, count });
+  });
+  const display: Record<string, string> = {};
+  const groups: NameGroup[] = [];
+  Object.entries(byKey).forEach(([k, vs]) => {
+    vs.sort((a, b) => b.count - a.count || a.name.length - b.name.length);
+    display[k] = vs[0].name;
+    if (vs.length > 1) groups.push({ display: vs[0].name, variants: vs, total: vs.reduce((a, v) => a + v.count, 0) });
+  });
+  groups.sort((a, b) => b.total - a.total);
+  return { canon: (s: string) => display[companyKey(s)] ?? s, groups };
+};
+
 // ===== データ解析ユーティリティ =====
-const buildAnalysis = (data: any[], hdrs: string[]): AnalysisResults => {
+const buildAnalysis = (data: any[], hdrs: string[], canon: (s: string) => string = s => s): AnalysisResults => {
   const applicantCol = hdrs.find(c => c && (c.includes('出願人') || c.includes('Applicant') || c.includes('権利者')));
   const fiCol = hdrs.find(c => c && (c.includes('FI') || c.includes('F-term') || c.includes('分類')));
 
@@ -393,7 +297,7 @@ const buildAnalysis = (data: any[], hdrs: string[]): AnalysisResults => {
     data.forEach(row => {
       const val = row[applicantCol];
       if (!val) return;
-      const companies = val.split(/[;,\n]/).map((c: string) => c.trim()).filter(Boolean);
+      const companies = splitApplicants(val, canon);
       if (companies.length > 0) {
         leadingCompanies[companies[0]] = (leadingCompanies[companies[0]] || 0) + 1;
         companies.forEach((c: string) => { allCompanies[c] = (allCompanies[c] || 0) + 1; });
@@ -411,16 +315,18 @@ const buildAnalysis = (data: any[], hdrs: string[]): AnalysisResults => {
     .map(([key, count]) => { const [source, target] = key.split('|||'); return { source, target, count }; })
     .sort((a, b) => b.count - a.count).slice(0, 60);
 
+  const normalizeFi = (c: string) => {
+    const t = c.trim();
+    return t.length > 6 ? t.substring(0, 6).replace(/[\/\-]$/, '') : t;
+  };
+
   const leadingFIs: Record<string, number> = {};
   const allFIs: Record<string, number> = {};
   if (fiCol) {
     data.forEach(row => {
       const val = row[fiCol];
       if (!val) return;
-      const codes = val.split(/[;,\n]/).map((c: string) => {
-        const t = c.trim();
-        return t.length > 6 ? t.substring(0, 6).replace(/[\/\-]$/, '') : t;
-      }).filter(Boolean);
+      const codes = val.split(/[;,\n]/).map(normalizeFi).filter(Boolean);
       if (codes.length > 0) {
         leadingFIs[codes[0]] = (leadingFIs[codes[0]] || 0) + 1;
         codes.forEach((c: string) => { allFIs[c] = (allFIs[c] || 0) + 1; });
@@ -432,7 +338,7 @@ const buildAnalysis = (data: any[], hdrs: string[]): AnalysisResults => {
   if (applicantCol) {
     data.forEach(row => {
       if (!row.Year || !row[applicantCol]) return;
-      row[applicantCol].split(/[;,\n]/).map((c: string) => c.trim()).filter(Boolean).forEach((c: string) => {
+      splitApplicants(row[applicantCol], canon).forEach((c: string) => {
         if (!companyYearAnalysis[c]) companyYearAnalysis[c] = {};
         companyYearAnalysis[c][row.Year] = (companyYearAnalysis[c][row.Year] || 0) + 1;
       });
@@ -443,10 +349,7 @@ const buildAnalysis = (data: any[], hdrs: string[]): AnalysisResults => {
   if (fiCol) {
     data.forEach(row => {
       if (!row.Year || !row[fiCol]) return;
-      row[fiCol].split(/[;,\n]/).map((c: string) => {
-        const t = c.trim();
-        return t.length > 6 ? t.substring(0, 6).replace(/[\/\-]$/, '') : t;
-      }).filter(Boolean).forEach((c: string) => {
+      row[fiCol].split(/[;,\n]/).map(normalizeFi).filter(Boolean).forEach((c: string) => {
         if (!fiYearAnalysis[c]) fiYearAnalysis[c] = {};
         fiYearAnalysis[c][row.Year] = (fiYearAnalysis[c][row.Year] || 0) + 1;
       });
@@ -511,6 +414,14 @@ const PatentAnalysisApp: React.FC = () => {
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [tableSearch, setTableSearch] = useState('');
+  const [tableUseFilter, setTableUseFilter] = useState(true);
+  const [hiddenCols, setHiddenCols] = useState<string[]>([]);
+  const [showColMenu, setShowColMenu] = useState(false);
+  const [detailRow, setDetailRow] = useState<any | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfMode, setPdfMode] = useState(false);
+  const [mergeNames, setMergeNames] = useState(true);
+  const [showGroups, setShowGroups] = useState(false);
 
   const EMPTY_FILTER: FilterConfig = {
     yearFrom:'', yearTo:'',
@@ -543,15 +454,6 @@ const PatentAnalysisApp: React.FC = () => {
     return lines.join('\n');
   };
 
-  const CustomYAxisTick = ({ x, y, payload }: { x: number; y: number; payload: { value: string } }): React.ReactElement<SVGElement> => {
-    const lines = String(payload.value).split('\n');
-    return (
-      <g transform={`translate(${x},${y})`}>
-        {lines.map((line, i) => <text key={i} x={0} y={i * 12 - (lines.length - 1) * 6} textAnchor="end" fill="#666" fontSize="11">{line}</text>)}
-      </g>
-    );
-  };
-
   const generateWordcloud = async (source: File | any[]) => {
     setWcLoading(true); setWordcloudImage(null); setWcIsFiltered(false);
     try {
@@ -559,7 +461,6 @@ const PatentAnalysisApp: React.FC = () => {
       if (source instanceof File) {
         file = source;
       } else {
-        // フィルター後データをCSV文字列 → Blobに変換してFileとして送信
         const csvStr = Papa.unparse(source, { header: true });
         const blob = new Blob(['\uFEFF' + csvStr], { type: 'text/csv;charset=utf-8;' });
         file = new File([blob], 'filtered.csv', { type: 'text/csv' });
@@ -587,7 +488,8 @@ const PatentAnalysisApp: React.FC = () => {
   const processFile = (file: File) => {
     setSelectedFile(file); setLoading(true); setError(null); setWordcloudImage(null);
     setSortConfig(null); setCurrentPage(1); setTableSearch('');
-    setCompanySearch('');
+    setCompanySearch(''); setHiddenCols([]); setDetailRow(null);
+    setFilters(EMPTY_FILTER); setAppliedFilters(EMPTY_FILTER);
     Papa.parse(file, {
       complete: (results: any) => {
         try {
@@ -610,7 +512,6 @@ const PatentAnalysisApp: React.FC = () => {
     });
   };
 
-  // キーワードマッチングヘルパー
   const matchKeywords = (val: string, keywords: string[], mode: 'AND'|'OR', exclude: string[]): boolean => {
     const v = val?.toLowerCase() || '';
     const kws = keywords.map(k => k.toLowerCase()).filter(Boolean);
@@ -619,6 +520,16 @@ const PatentAnalysisApp: React.FC = () => {
     if (kws.length === 0) return true;
     return mode === 'AND' ? kws.every(k => v.includes(k)) : kws.some(k => v.includes(k));
   };
+
+  const applicantColName = headers.find(c => c && (c.includes('出願人') || c.includes('Applicant') || c.includes('権利者')));
+  const fiColName = headers.find(c => c && (c.includes('FI') || c.includes('F-term') || c.includes('分類')));
+
+  const nameMap = useMemo(() => {
+    const col = headers.find(c => c && (c.includes('出願人') || c.includes('Applicant') || c.includes('権利者')));
+    return buildNameMap(csvData, col, mergeNames);
+  }, [csvData, headers, mergeNames]);
+
+  const splitCompanies = useCallback((v: string) => splitApplicants(v, nameMap.canon), [nameMap]);
 
   const filteredData = useMemo(() => {
     if (!csvData) return [];
@@ -630,28 +541,26 @@ const PatentAnalysisApp: React.FC = () => {
       if (appliedFilters.yearTo && row.Year > parseInt(appliedFilters.yearTo)) return false;
       if (applicantCol) {
         const companyVal = row[applicantCol] || '';
-        // 会社ドロップダウン選択
         if (appliedFilters.selectedCompanies.length > 0) {
-          const rowCompanies = companyVal.split(/[;,\n]/).map((c: string) => c.trim());
+          const rowCompanies = splitApplicants(companyVal, nameMap.canon);
           if (!appliedFilters.selectedCompanies.some(sc => rowCompanies.includes(sc))) return false;
         }
-        // キーワード
         if (!matchKeywords(companyVal, appliedFilters.companyKeywords, appliedFilters.companyMode, appliedFilters.companyExclude)) return false;
       }
       if (fiCol && !matchKeywords(row[fiCol] || '', appliedFilters.fiKeywords, appliedFilters.fiMode, appliedFilters.fiExclude)) return false;
       if (titleCol && !matchKeywords(row[titleCol] || '', appliedFilters.titleKeywords, appliedFilters.titleMode, appliedFilters.titleExclude)) return false;
       return true;
     });
-  }, [csvData, headers, appliedFilters]);
+  }, [csvData, headers, appliedFilters, nameMap]);
 
   const filteredAnalysis = useMemo(() => {
     if (!csvData || !headers.length) return null;
-    return buildAnalysis(filteredData, headers);
-  }, [filteredData, headers, csvData]);
+    return buildAnalysis(filteredData, headers, nameMap.canon);
+  }, [filteredData, headers, csvData, nameMap]);
 
   const tableData = useMemo(() => {
     if (!csvData) return [];
-    let data = [...csvData];
+    let data = [...(tableUseFilter ? filteredData : csvData)];
     if (tableSearch.trim()) {
       const q = tableSearch.toLowerCase();
       data = data.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(q)));
@@ -666,8 +575,9 @@ const PatentAnalysisApp: React.FC = () => {
       });
     }
     return data;
-  }, [csvData, tableSearch, sortConfig]);
+  }, [csvData, filteredData, tableUseFilter, tableSearch, sortConfig]);
 
+  const visibleHeaders = headers.filter(h => !hiddenCols.includes(h));
   const totalPages = Math.ceil(tableData.length / PAGE_SIZE);
   const pagedData = tableData.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const handleSort = (key: string) => {
@@ -685,13 +595,83 @@ const PatentAnalysisApp: React.FC = () => {
   }, []);
 
   const downloadFilteredData = () => { if (filteredData.length) downloadCSV(filteredData, `patent_filtered_${Date.now()}.csv`, headers); };
-  const downloadTableData = () => { if (tableData.length) downloadCSV(tableData, `patent_table_${Date.now()}.csv`, headers); };
+  const downloadTableData = () => { if (tableData.length) downloadCSV(tableData, `patent_table_${Date.now()}.csv`, visibleHeaders); };
   const downloadAggregated = (type: 'year' | 'company' | 'fi' | 'cofiling') => {
     if (!filteredAnalysis) return;
     if (type === 'year') downloadCSV(Object.entries(filteredAnalysis.yearCounts).sort(([a],[b]) => parseInt(a)-parseInt(b)).map(([年,件数]) => ({年,件数})), `patent_year_${Date.now()}.csv`);
     else if (type === 'company') downloadCSV(Object.entries(filteredAnalysis.allCompanies).sort(([,a],[,b]) => b-a).map(([出願人,件数]) => ({出願人,件数})), `patent_company_${Date.now()}.csv`);
     else if (type === 'fi') downloadCSV(Object.entries(filteredAnalysis.allFIs).sort(([,a],[,b]) => b-a).map(([FIコード,件数]) => ({FIコード, 技術分野: getFiDescription(FIコード), 件数})), `patent_fi_${Date.now()}.csv`);
     else downloadCSV(filteredAnalysis.cofilingEdges.map(({ source, target, count }) => ({出願人A:source, 出願人B:target, 共同出願件数:count})), `patent_cofiling_${Date.now()}.csv`);
+  };
+
+  // ===== PDFレポート出力（コンパクト表示で画像化し、空きを詰めてA4に配置） =====
+  const downloadPDF = async () => {
+    if (!analysisResults) return;
+    setPdfLoading(true);
+    setPdfMode(true); // グラフを低め・アニメなしに切り替え
+    try {
+      await new Promise(r => setTimeout(r, 700));
+      const [{ jsPDF }, html2canvas] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas-pro').then(m => m.default),
+      ]);
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+      const pageW = 210, pageH = 297, margin = 8, gap = 4;
+      const contentW = pageW - margin * 2;
+      const bottom = pageH - margin - 4; // フッター（ページ番号）分を確保
+      const contentH = bottom - margin;
+      const order = ['header','overview','wordcloud','year','insights','techmap','cofiling','co-rank','pie','leading-fi','all-fi','co-ts','fi-ts'];
+
+      const items: { canvas: HTMLCanvasElement; h: number }[] = [];
+      for (const key of order) {
+        const el = chartRefs.current[key];
+        if (!el) continue;
+        const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+        items.push({ canvas, h: (canvas.height * contentW) / canvas.width });
+      }
+
+      let y = margin, first = true;
+      const startPage = () => { if (!first) pdf.addPage(); first = false; y = margin; };
+      startPage();
+      const remaining = [...items];
+      while (remaining.length) {
+        // 残りスペースに入る最初の要素を詰める（順序はなるべく維持）
+        let idx = remaining.findIndex(it => it.h <= bottom - y);
+        if (idx === -1) {
+          if (y > margin) { startPage(); continue; }
+          idx = 0; // 1ページより長い要素は分割
+        }
+        const it = remaining.splice(idx, 1)[0];
+        if (it.h <= bottom - y) {
+          pdf.addImage(it.canvas.toDataURL('image/jpeg', 0.92), 'JPEG', margin, y, contentW, it.h);
+          y += it.h + gap;
+        } else {
+          const slicePx = Math.floor((contentH * it.canvas.width) / contentW);
+          for (let sy = 0; sy < it.canvas.height; sy += slicePx) {
+            if (sy > 0) startPage();
+            const h = Math.min(slicePx, it.canvas.height - sy);
+            const part = document.createElement('canvas');
+            part.width = it.canvas.width; part.height = h;
+            part.getContext('2d')!.drawImage(it.canvas, 0, sy, it.canvas.width, h, 0, 0, it.canvas.width, h);
+            const partH = (h * contentW) / it.canvas.width;
+            pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', margin, y, contentW, partH);
+            y += partH + gap;
+          }
+        }
+      }
+      const n = pdf.getNumberOfPages();
+      for (let i = 1; i <= n; i++) {
+        pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(150);
+        pdf.text(`${i} / ${n}`, pageW / 2, pageH - 4, { align: 'center' });
+      }
+      pdf.save(`patent_report_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      console.error('PDF error:', err);
+      setError('PDFの作成に失敗しました。ブラウザのコンソールを確認してください。');
+    } finally {
+      setPdfMode(false);
+      setPdfLoading(false);
+    }
   };
 
   const getTopN = (data: Record<string, number>, n = 10) =>
@@ -722,12 +702,18 @@ const PatentAnalysisApp: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto">
 
-        {/* ヘッダー */}
-        <div className="bg-white rounded-xl shadow-2xl p-8 mb-8">
-          <h1 className="text-4xl font-bold text-center text-gray-800 mb-2">J-PlatPat特許データ解析システム</h1>
-          <p className="text-center text-gray-600 mb-8">J-PlatPatのCSVファイルから特許データを解析し、包括的なレポートを生成します</p>
+        {/* ブランドヘッダー */}
+        <div className="mb-6" ref={el => { chartRefs.current['header'] = el; }}>
+          <BrandHeader
+            title="J-PlatPat特許データ解析システム"
+            subtitle="J-PlatPatのCSVファイルから特許データを解析し、包括的なレポートを生成します"
+          />
+        </div>
+
+        {/* アップロード */}
+        <div className="bg-white rounded-xl shadow-2xl p-6 mb-8">
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center mb-6 cursor-pointer transition-all duration-200 ${isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}`}
+            className={`border-2 border-dashed rounded-lg p-8 text-center mb-2 cursor-pointer transition-all duration-200 ${isDragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}`}
             onClick={() => fileInputRef.current?.click()}
             onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={e => { e.preventDefault(); setIsDragOver(false); }}
@@ -744,13 +730,13 @@ const PatentAnalysisApp: React.FC = () => {
             <input ref={fileInputRef} type="file" accept=".csv" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); }} className="hidden" />
             {selectedFile && <p className="mt-4 text-sm text-gray-600 bg-gray-100 rounded px-3 py-2 inline-block">選択されたファイル: {selectedFile.name}</p>}
           </div>
-          {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
+          {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-4">{error}</div>}
           {loading && <div className="text-center py-8"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div><p className="mt-4 text-gray-600">処理中...</p></div>}
         </div>
 
         {/* 概要 */}
         {analysisResults && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-8" ref={el => { chartRefs.current['overview'] = el; }}>
             <h2 className="text-2xl font-bold text-gray-800 mb-4">解析結果の概要</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg">
@@ -796,7 +782,7 @@ const PatentAnalysisApp: React.FC = () => {
           <>
             {/* ワードクラウド */}
             {(wcLoading || wordcloudImage) && (
-              <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+              <div className="bg-white rounded-xl shadow-lg p-6 mb-6" ref={el => { chartRefs.current['wordcloud'] = el; }}>
                 <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
                   <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                     <span>☁️</span>ワードクラウド（発明の名称）
@@ -842,23 +828,60 @@ const PatentAnalysisApp: React.FC = () => {
                   {activeFiltersCount > 0 && <span className="bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">{activeFiltersCount}</span>}
                   {showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </button>
+                <div className="flex items-center gap-2">
+                <button onClick={downloadPDF} disabled={pdfLoading}
+                  className="flex items-center gap-1 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700 transition-colors disabled:opacity-60">
+                  <FileText className="h-4 w-4" />{pdfLoading ? 'PDF作成中...' : 'PDFレポート'}
+                </button>
                 <div className="relative group">
                   <button className="flex items-center gap-1 px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition-colors">
                     <Download className="h-4 w-4" />CSVダウンロード
                   </button>
-                  <div className="absolute right-0 top-full mt-1 bg-white shadow-xl rounded-lg border z-10 hidden group-hover:block w-56">
-                    <button onClick={downloadFilteredData} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">フィルター後の生データ</button>
-                    <button onClick={() => downloadAggregated('year')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">年別集計データ</button>
-                    <button onClick={() => downloadAggregated('company')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">会社別集計データ</button>
-                    <button onClick={() => downloadAggregated('fi')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">FIコード別集計（日本語付き）</button>
-                    <button onClick={() => downloadAggregated('cofiling')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50">共同出願ペアデータ</button>
+                  <div className="absolute right-0 top-full pt-1 z-10 hidden group-hover:block w-56">
+                    <div className="bg-white shadow-xl rounded-lg border">
+                      <button onClick={downloadFilteredData} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">フィルター後の生データ</button>
+                      <button onClick={() => downloadAggregated('year')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">年別集計データ</button>
+                      <button onClick={() => downloadAggregated('company')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">会社別集計データ</button>
+                      <button onClick={() => downloadAggregated('fi')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b">FIコード別集計（日本語付き）</button>
+                      <button onClick={() => downloadAggregated('cofiling')} className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-50">共同出願ペアデータ</button>
+                    </div>
                   </div>
                 </div>
+                </div>
               </div>
+              {analysisResults?.hasApplicantData && (
+                <div className="mt-3 pt-3 border-t text-sm">
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-gray-700">
+                    <input type="checkbox" checked={mergeNames}
+                      onChange={e => {
+                        setMergeNames(e.target.checked);
+                        setFilters(f => ({ ...f, selectedCompanies: [] }));
+                        setAppliedFilters(f => ({ ...f, selectedCompanies: [] }));
+                      }} />
+                    出願人名の表記ゆれを統合する
+                    <span className="text-xs text-gray-400">（株式会社／(株)／CO., LTD. などを同一企業として集計）</span>
+                  </label>
+                  {mergeNames && nameMap.groups.length > 0 && (
+                    <button onClick={() => setShowGroups(v => !v)} className="ml-3 text-xs text-blue-600 underline">
+                      {showGroups ? '統合結果を閉じる' : `統合された${nameMap.groups.length}社を確認`}
+                    </button>
+                  )}
+                  {mergeNames && showGroups && (
+                    <div className="mt-2 max-h-56 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                      {nameMap.groups.slice(0, 200).map(g => (
+                        <div key={g.display} className="px-3 py-1.5">
+                          <span className="font-semibold text-gray-800">{g.display}</span>
+                          <span className="ml-2 text-xs text-gray-500">{g.variants.map(v => `${v.name}(${v.count})`).join(' / ')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {showFilters && (
                 <div className="border-t pt-4 mt-4 space-y-5">
 
-                  {/* 出願年スライダー */}
+                  {/* 出願年 */}
                   {(() => {
                     const years = csvData ? [...new Set(csvData.map((r: any) => r.Year).filter(Boolean))].sort((a: number, b: number) => a - b) : [];
                     const minY = years[0] ?? 2000;
@@ -889,11 +912,10 @@ const PatentAnalysisApp: React.FC = () => {
                     );
                   })()}
 
-                  {/* 会社名フィルター */}
+                  {/* 出願人 */}
                   {analysisResults?.hasApplicantData && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">🏢 出願人フィルター</label>
-                      {/* ドロップダウン複数選択 */}
                       <div className="mb-2 relative">
                         <div className="flex items-center border border-gray-300 rounded-lg px-3 py-2 bg-white cursor-text focus-within:ring-2 focus-within:ring-blue-400 min-h-[40px] flex-wrap gap-1"
                           onClick={() => setShowCompanyDropdown(true)}>
@@ -933,7 +955,6 @@ const PatentAnalysisApp: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      {/* キーワード＋AND/OR */}
                       <div className="flex gap-2 items-center">
                         <div className="flex-1">
                           <TagInput tags={filters.companyKeywords} onChange={tags => setFilters(f => ({ ...f, companyKeywords: tags }))}
@@ -952,7 +973,7 @@ const PatentAnalysisApp: React.FC = () => {
                     </div>
                   )}
 
-                  {/* FIコードフィルター */}
+                  {/* FI */}
                   {analysisResults?.hasFIData && (
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">🔬 FIコードフィルター</label>
@@ -974,7 +995,7 @@ const PatentAnalysisApp: React.FC = () => {
                     </div>
                   )}
 
-                  {/* 発明の名称フィルター */}
+                  {/* 発明の名称 */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">💡 発明の名称フィルター</label>
                     <div className="flex gap-2 items-center">
@@ -995,8 +1016,8 @@ const PatentAnalysisApp: React.FC = () => {
                   </div>
 
                   <div className="flex gap-3 pt-1">
-                    <button onClick={() => { setAppliedFilters({ ...filters }); setShowCompanyDropdown(false); }} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">フィルターを適用</button>
-                    <button onClick={() => { setFilters(EMPTY_FILTER); setAppliedFilters(EMPTY_FILTER); setCompanySearch(''); }} className="flex items-center gap-1 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200"><X className="h-4 w-4" />すべてクリア</button>
+                    <button onClick={() => { setAppliedFilters({ ...filters }); setShowCompanyDropdown(false); setCurrentPage(1); }} className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">フィルターを適用</button>
+                    <button onClick={() => { setFilters(EMPTY_FILTER); setAppliedFilters(EMPTY_FILTER); setCompanySearch(''); setCurrentPage(1); }} className="flex items-center gap-1 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200"><X className="h-4 w-4" />すべてクリア</button>
                   </div>
                   {activeFiltersCount > 0 && <p className="text-sm text-blue-600">フィルター適用中: 全{csvData?.length}件 → <span className="font-bold">{filteredData.length}件</span></p>}
                 </div>
@@ -1007,13 +1028,45 @@ const PatentAnalysisApp: React.FC = () => {
               {/* 年次推移 */}
               <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['year'] = el; }}>
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><TrendingUp className="mr-2 h-6 w-6 text-blue-600" />出願件数の推移</h2>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={getYearData(filteredAnalysis?.yearCounts || {})}>
-                    <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="year" /><YAxis /><Tooltip /><Legend />
-                    <Line type="linear" dataKey="count" stroke="#2563eb" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  </LineChart>
+                <ResponsiveContainer width="100%" height={pdfMode ? 240 : 300}>
+                  <AreaChart data={getYearData(filteredAnalysis?.yearCounts || {})}>
+                    <defs>
+                      <linearGradient id="yearFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="year" /><YAxis allowDecimals={false} /><Tooltip />
+                    <Area isAnimationActive={!pdfMode} type="linear" dataKey="count" name="出願件数" stroke="#2563eb" strokeWidth={3} fill="url(#yearFill)" dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* トレンド・競争環境インサイト（新規） */}
+              {filteredAnalysis && filteredData.length > 0 && (
+                <div ref={el => { chartRefs.current['insights'] = el; }}>
+                <InsightsPanel
+                  yearCounts={filteredAnalysis.yearCounts}
+                  allCompanies={filteredAnalysis.allCompanies}
+                  companyYearAnalysis={filteredAnalysis.companyYearAnalysis}
+                  fiYearAnalysis={filteredAnalysis.fiYearAnalysis}
+                  getFiDescription={getFiDescription}
+                />
+                </div>
+              )}
+
+              {/* 技術分野マップ（出願人 × FI） */}
+              {filteredData.length > 0 && applicantColName && fiColName && (
+                <div ref={el => { chartRefs.current['techmap'] = el; }}>
+                  <TechMap
+                    rows={filteredData}
+                    applicantCol={applicantColName}
+                    fiCol={fiColName}
+                    splitCompanies={splitCompanies}
+                    getFiDescription={getFiDescription}
+                  />
+                </div>
+              )}
 
               {/* 共同出願ネットワーク */}
               {filteredAnalysis?.hasApplicantData && (
@@ -1051,80 +1104,81 @@ const PatentAnalysisApp: React.FC = () => {
                 </div>
               )}
 
-              {/* 筆頭会社 TOP10 */}
+              {/* 会社ランキング（筆頭／全体） */}
               {filteredAnalysis?.hasApplicantData && (
-                <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['leading-co'] = el; }}>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><BarChart3 className="mr-2 h-6 w-6 text-yellow-600" />筆頭会社トップ10</h2>
-                  <ResponsiveContainer width="100%" height={550}>
-                    <BarChart data={getTopN(filteredAnalysis.leadingCompanies, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={300} tick={CustomYAxisTick} interval={0} />
-                      <Tooltip formatter={(v: any, _n: string, p: any) => [v, p.payload.originalName]} />
-                      <Bar dataKey="value" fill="#f59e0b" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" ref={el => { chartRefs.current['co-rank'] = el; }}>
+                  <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-1 flex items-center"><BarChart3 className="mr-2 h-6 w-6 text-yellow-600" />筆頭会社トップ10</h2>
+                    <p className="text-sm text-gray-500 mb-4">出願人欄の先頭に記載された会社の件数です。</p>
+                    <RankList
+                      data={getTopN(filteredAnalysis.leadingCompanies, 10).map(d => ({ name: d.originalName, value: d.value }))}
+                      total={Object.values(filteredAnalysis.leadingCompanies).reduce((a, b) => a + b, 0)}
+                      color="#f59e0b" />
+                  </div>
+                  <div className="bg-white rounded-xl shadow-lg p-6">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-1 flex items-center"><BarChart3 className="mr-2 h-6 w-6 text-blue-600" />全体会社トップ10</h2>
+                    <p className="text-sm text-gray-500 mb-4">共同出願を含め、出願人欄に載った全社の件数です。</p>
+                    <RankList
+                      data={getTopN(filteredAnalysis.allCompanies, 10).map(d => ({ name: d.originalName, value: d.value }))}
+                      total={Object.values(filteredAnalysis.allCompanies).reduce((a, b) => a + b, 0)}
+                      color="#3b82f6" />
+                  </div>
                 </div>
               )}
 
-              {/* 全会社 TOP10 */}
-              {filteredAnalysis?.hasApplicantData && (
-                <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['all-co'] = el; }}>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><BarChart3 className="mr-2 h-6 w-6 text-blue-600" />全体会社トップ10</h2>
-                  <ResponsiveContainer width="100%" height={550}>
-                    <BarChart data={getTopN(filteredAnalysis.allCompanies, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={300} tick={CustomYAxisTick} interval={0} />
-                      <Tooltip formatter={(v: any, _n: string, p: any) => [v, p.payload.originalName]} />
-                      <Bar dataKey="value" fill="#3b82f6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              {/* 筆頭会社の割合（ドーナツ） */}
+              {filteredAnalysis?.hasApplicantData && (() => {
+                const total = Object.values(filteredAnalysis.leadingCompanies).reduce((a, b) => a + b, 0);
+                const top = getTopN(filteredAnalysis.leadingCompanies, 10);
+                const others = total - top.reduce((a, b) => a + b.value, 0);
+                const pieData = [...top, ...(others > 0 ? [{ name: 'その他', originalName: 'その他', value: others }] : [])];
+                const colorOf = (i: number) => (pieData[i].originalName === 'その他' ? '#cbd5e1' : COLORS[i % COLORS.length]);
+                return (
+                  <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['pie'] = el; }}>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><Target className="mr-2 h-6 w-6 text-purple-600" />筆頭会社の割合</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                      <div className="relative">
+                        <ResponsiveContainer width="100%" height={pdfMode ? 260 : 320}>
+                          <PieChart>
+                            <Pie isAnimationActive={!pdfMode} data={pieData} dataKey="value" nameKey="originalName" cx="50%" cy="50%"
+                              innerRadius="58%" outerRadius="92%" paddingAngle={2} stroke="none">
+                              {pieData.map((_, i) => <Cell key={i} fill={colorOf(i)} />)}
+                            </Pie>
+                            <Tooltip formatter={(v: any, _n: string, p: any) => [`${v}件`, p.payload.originalName]} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <div className="text-xs text-gray-400">総件数</div>
+                          <div className="text-3xl font-bold text-gray-800">{total.toLocaleString()}</div>
+                        </div>
+                      </div>
+                      <ul className="space-y-1.5">
+                        {pieData.map((d, i) => (
+                          <li key={d.originalName} className="flex items-center gap-2 text-sm">
+                            <span className="h-3 w-3 rounded-sm shrink-0" style={{ backgroundColor: colorOf(i) }} />
+                            <span className="flex-1 min-w-0 break-words text-gray-700" title={d.originalName}>{d.originalName}</span>
+                            <span className="tabular-nums text-gray-500 whitespace-nowrap">{d.value.toLocaleString()}件</span>
+                            <span className="tabular-nums font-semibold text-gray-800 w-14 text-right">{total > 0 ? ((d.value / total) * 100).toFixed(1) : '0.0'}%</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
 
-              {/* 筆頭会社 円グラフ */}
-              {filteredAnalysis?.hasApplicantData && (
-                <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['pie'] = el; }}>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><Target className="mr-2 h-6 w-6 text-purple-600" />筆頭会社の割合</h2>
-                  <ResponsiveContainer width="100%" height={500}>
-                    <PieChart>
-                      <Pie data={getTopN(filteredAnalysis.leadingCompanies, 10)} cx="50%" cy="50%" outerRadius={150} dataKey="value"
-                        label={(e: any) => `${wrapText(e.originalName, 15)} ${(e.percent * 100).toFixed(1)}%`}>
-                        {getTopN(filteredAnalysis.leadingCompanies, 10).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip formatter={(v: any, _n: string, p: any) => [v, p.payload.originalName]} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-
-              {/* 筆頭FI TOP10 + テーブル */}
+              {/* 筆頭FI TOP10 */}
               {filteredAnalysis?.hasFIData && (
                 <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['leading-fi'] = el; }}>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><BarChart3 className="mr-2 h-6 w-6 text-red-600" />筆頭分類コードトップ10</h2>
-                  <ResponsiveContainer width="100%" height={380}>
-                    <BarChart data={getTopN(filteredAnalysis.leadingFIs, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={80} />
-                      <Tooltip formatter={(v: any, _n: string, p: any) => [v, p.payload.originalName]} />
-                      <Bar dataKey="value" fill="#ef4444" />
-                    </BarChart>
-                  </ResponsiveContainer>
                   <FiRankingTable fiData={filteredAnalysis.leadingFIs} accentColor="#ef4444" bgColor="#fef2f2" />
                 </div>
               )}
 
-              {/* 全FI TOP10 + テーブル */}
+              {/* 全FI TOP10 */}
               {filteredAnalysis?.hasFIData && (
                 <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['all-fi'] = el; }}>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><BarChart3 className="mr-2 h-6 w-6 text-indigo-600" />全分類コードトップ10</h2>
-                  <ResponsiveContainer width="100%" height={380}>
-                    <BarChart data={getTopN(filteredAnalysis.allFIs, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis type="number" />
-                      <YAxis dataKey="name" type="category" width={80} />
-                      <Tooltip formatter={(v: any, _n: string, p: any) => [v, p.payload.originalName]} />
-                      <Bar dataKey="value" fill="#6366f1" />
-                    </BarChart>
-                  </ResponsiveContainer>
                   <FiRankingTable fiData={filteredAnalysis.allFIs} accentColor="#6366f1" bgColor="#eef2ff" />
                 </div>
               )}
@@ -1133,11 +1187,11 @@ const PatentAnalysisApp: React.FC = () => {
               {filteredAnalysis?.hasApplicantData && (
                 <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['co-ts'] = el; }}>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><TrendingUp className="mr-2 h-6 w-6 text-green-600" />会社別出願件数の時系列分析</h2>
-                  <ResponsiveContainer width="100%" height={400}>
+                  <ResponsiveContainer width="100%" height={pdfMode ? 300 : 400}>
                     <LineChart data={getTimeSeriesData(filteredAnalysis.companyYearAnalysis, getTopN(filteredAnalysis.allCompanies, 5))}>
                       <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="year" /><YAxis /><Tooltip /><Legend />
                       {getTopN(filteredAnalysis.allCompanies, 5).map((c, i) => (
-                        <Line key={c.originalName} type="linear" dataKey={c.originalName} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} name={c.originalName} />
+                        <Line isAnimationActive={!pdfMode} key={c.originalName} type="linear" dataKey={c.originalName} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} name={c.originalName} />
                       ))}
                     </LineChart>
                   </ResponsiveContainer>
@@ -1148,11 +1202,11 @@ const PatentAnalysisApp: React.FC = () => {
               {filteredAnalysis?.hasFIData && (
                 <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['fi-ts'] = el; }}>
                   <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><TrendingUp className="mr-2 h-6 w-6 text-purple-600" />分類コード別出願件数の時系列分析</h2>
-                  <ResponsiveContainer width="100%" height={400}>
+                  <ResponsiveContainer width="100%" height={pdfMode ? 300 : 400}>
                     <LineChart data={getTimeSeriesData(filteredAnalysis.fiYearAnalysis, getTopN(filteredAnalysis.allFIs, 5))}>
                       <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="year" /><YAxis /><Tooltip /><Legend />
                       {getTopN(filteredAnalysis.allFIs, 5).map((fi, i) => (
-                        <Line key={fi.originalName} type="linear" dataKey={fi.originalName} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} name={fi.originalName} />
+                        <Line isAnimationActive={!pdfMode} key={fi.originalName} type="linear" dataKey={fi.originalName} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} name={fi.originalName} />
                       ))}
                     </LineChart>
                   </ResponsiveContainer>
@@ -1165,19 +1219,44 @@ const PatentAnalysisApp: React.FC = () => {
         {/* ===== データテーブルタブ ===== */}
         {analysisResults && activeTab === 'table' && (
           <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex flex-col sm:flex-row gap-4 mb-4 items-start sm:items-center justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                <div className="relative flex-1 max-w-md">
+            <div className="flex flex-col lg:flex-row gap-4 mb-4 items-start lg:items-center justify-between">
+              <div className="flex items-center gap-3 flex-1 flex-wrap">
+                <div className="relative flex-1 min-w-56 max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input type="text" placeholder="全列を横断検索..." value={tableSearch}
                     onChange={e => { setTableSearch(e.target.value); setCurrentPage(1); }}
                     className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   {tableSearch && <button onClick={() => { setTableSearch(''); setCurrentPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>}
                 </div>
+                <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap cursor-pointer">
+                  <input type="checkbox" checked={tableUseFilter} onChange={e => { setTableUseFilter(e.target.checked); setCurrentPage(1); }} />
+                  グラフのフィルターを反映
+                </label>
                 <span className="text-sm text-gray-500 whitespace-nowrap">{tableData.length}件 / {csvData?.length}件</span>
+                <div className="relative">
+                  <button onClick={() => setShowColMenu(v => !v)} className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                    <Eye className="h-4 w-4" />列の表示
+                    {hiddenCols.length > 0 && <span className="bg-blue-600 text-white text-xs px-1.5 rounded-full">{hiddenCols.length}非表示</span>}
+                  </button>
+                  {showColMenu && (
+                    <div className="absolute z-20 mt-1 w-72 max-h-80 overflow-y-auto bg-white border rounded-lg shadow-xl p-2">
+                      <div className="flex justify-between px-2 pb-1 mb-1 border-b text-xs">
+                        <button onClick={() => setHiddenCols([])} className="text-blue-600 hover:underline">すべて表示</button>
+                        <button onClick={() => setShowColMenu(false)} className="text-gray-400 hover:text-gray-600">閉じる</button>
+                      </div>
+                      {headers.map(h => (
+                        <label key={h} className="flex items-center gap-2 px-2 py-1 text-sm hover:bg-gray-50 rounded cursor-pointer">
+                          <input type="checkbox" checked={!hiddenCols.includes(h)}
+                            onChange={() => setHiddenCols(c => c.includes(h) ? c.filter(x => x !== h) : [...c, h])} />
+                          <span className="truncate">{h}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <button onClick={downloadTableData} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 whitespace-nowrap">
-                <Download className="h-4 w-4" />このデータをCSV出力
+                <Download className="h-4 w-4" />表示中のデータをCSV出力
               </button>
             </div>
             {sortConfig && (
@@ -1186,14 +1265,15 @@ const PatentAnalysisApp: React.FC = () => {
                 <button onClick={() => setSortConfig(null)} className="ml-auto text-gray-500 hover:text-gray-700"><X className="h-4 w-4" /></button>
               </div>
             )}
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-400 mb-2">行をクリックすると全項目の詳細を表示します。</p>
+            <div className="overflow-auto rounded-lg border border-gray-200 max-h-[70vh]">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-12">#</th>
-                    {headers.map(h => (
+                  <tr className="border-b border-gray-200">
+                    <th className="sticky top-0 z-10 bg-gray-50 px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase w-12">#</th>
+                    {visibleHeaders.map(h => (
                       <th key={h} onClick={() => handleSort(h)}
-                        className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 hover:text-blue-600 transition-colors whitespace-nowrap select-none">
+                        className="sticky top-0 z-10 bg-gray-50 px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 hover:text-blue-600 transition-colors whitespace-nowrap select-none">
                         <span className="flex items-center gap-1">
                           {h}
                           {sortConfig?.key === h && (sortConfig.direction === 'asc' ? <ChevronUp className="h-3 w-3 text-blue-600" /> : <ChevronDown className="h-3 w-3 text-blue-600" />)}
@@ -1204,11 +1284,11 @@ const PatentAnalysisApp: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {pagedData.length === 0
-                    ? <tr><td colSpan={headers.length + 1} className="text-center py-12 text-gray-400">データが見つかりません</td></tr>
+                    ? <tr><td colSpan={visibleHeaders.length + 1} className="text-center py-12 text-gray-400">条件に一致するデータがありません。検索語やフィルターを見直してください。</td></tr>
                     : pagedData.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-blue-50 transition-colors">
+                      <tr key={idx} onClick={() => setDetailRow(row)} className="hover:bg-blue-50 transition-colors cursor-pointer">
                         <td className="px-3 py-2 text-gray-400 text-xs">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
-                        {headers.map(h => <td key={h} className="px-3 py-2 text-gray-700 max-w-xs truncate" title={String(row[h] || '')}>{String(row[h] || '')}</td>)}
+                        {visibleHeaders.map(h => <td key={h} className="px-3 py-2 text-gray-700 max-w-xs truncate" title={String(row[h] || '')}>{String(row[h] || '')}</td>)}
                       </tr>
                     ))}
                 </tbody>
@@ -1232,6 +1312,26 @@ const PatentAnalysisApp: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* 行の詳細モーダル */}
+      {detailRow && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDetailRow(null)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-800">特許の詳細</h3>
+              <button onClick={() => setDetailRow(null)} aria-label="閉じる"><X className="h-5 w-5 text-gray-500" /></button>
+            </div>
+            <dl className="divide-y divide-gray-100">
+              {headers.map(h => detailRow[h] ? (
+                <div key={h} className="py-2 grid grid-cols-3 gap-3 text-sm">
+                  <dt className="text-gray-500">{h}</dt>
+                  <dd className="col-span-2 text-gray-800 break-words whitespace-pre-wrap">{String(detailRow[h])}</dd>
+                </div>
+              ) : null)}
+            </dl>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
