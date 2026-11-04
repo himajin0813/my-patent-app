@@ -2,11 +2,12 @@
 import { BarChart3, ChevronDown, ChevronUp, Download, Eye, FileText, Filter, Search, Share2, Table, Target, TrendingUp, Upload, X } from 'lucide-react';
 import Papa from 'papaparse';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Area, AreaChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BrandHeader } from './BrandHeader';
 import { CofilingNetwork } from './CofilingNetwork';
 import { InsightsPanel } from './InsightsPanel';
 import { RankList } from './RankList';
+import { TimeSeriesPanel } from './TimeSeriesPanel';
 import { TechMap } from './TechMap';
 
 // ===== FI サブクラス 日本語対応表（A〜H全セクション） =====
@@ -678,15 +679,6 @@ const PatentAnalysisApp: React.FC = () => {
     Object.entries(data).sort(([,a],[,b]) => b-a).slice(0, n).map(([name,value]) => ({ name: wrapText(name, 25), originalName: name, value }));
   const getYearData = (data: Record<string, number>) =>
     Object.entries(data).sort(([a],[b]) => parseInt(a)-parseInt(b)).map(([year,count]) => ({ year: parseInt(year), count }));
-  const getTimeSeriesData = (yearAnalysis: Record<string, Record<string, number>>, topItems: any[]) => {
-    const years = [...new Set(Object.values(yearAnalysis).flatMap(obj => Object.keys(obj)))].sort((a,b) => parseInt(a)-parseInt(b));
-    return years.map(year => {
-      const dp: any = { year: parseInt(year) };
-      topItems.forEach(item => { dp[item.originalName || item.name] = yearAnalysis[item.originalName || item.name]?.[year] || 0; });
-      return dp;
-    });
-  };
-
   const activeFiltersCount = [
     appliedFilters.yearFrom, appliedFilters.yearTo,
     appliedFilters.companyKeywords.length > 0 ? '1' : '',
@@ -1185,31 +1177,26 @@ const PatentAnalysisApp: React.FC = () => {
 
               {/* 会社別時系列 */}
               {filteredAnalysis?.hasApplicantData && (
-                <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['co-ts'] = el; }}>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><TrendingUp className="mr-2 h-6 w-6 text-green-600" />会社別出願件数の時系列分析</h2>
-                  <ResponsiveContainer width="100%" height={pdfMode ? 300 : 400}>
-                    <LineChart data={getTimeSeriesData(filteredAnalysis.companyYearAnalysis, getTopN(filteredAnalysis.allCompanies, 5))}>
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="year" /><YAxis /><Tooltip /><Legend />
-                      {getTopN(filteredAnalysis.allCompanies, 5).map((c, i) => (
-                        <Line isAnimationActive={!pdfMode} key={c.originalName} type="linear" dataKey={c.originalName} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} name={c.originalName} />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div ref={el => { chartRefs.current['co-ts'] = el; }}>
+                  <TimeSeriesPanel
+                    title="会社別出願件数の時系列分析" accent="#16a34a" idPrefix="co"
+                    ranking={filteredAnalysis.allCompanies}
+                    yearAnalysis={filteredAnalysis.companyYearAnalysis}
+                    pdfMode={pdfMode}
+                  />
                 </div>
               )}
 
               {/* FI別時系列 */}
               {filteredAnalysis?.hasFIData && (
-                <div className="bg-white rounded-xl shadow-lg p-6" ref={el => { chartRefs.current['fi-ts'] = el; }}>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center"><TrendingUp className="mr-2 h-6 w-6 text-purple-600" />分類コード別出願件数の時系列分析</h2>
-                  <ResponsiveContainer width="100%" height={pdfMode ? 300 : 400}>
-                    <LineChart data={getTimeSeriesData(filteredAnalysis.fiYearAnalysis, getTopN(filteredAnalysis.allFIs, 5))}>
-                      <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="year" /><YAxis /><Tooltip /><Legend />
-                      {getTopN(filteredAnalysis.allFIs, 5).map((fi, i) => (
-                        <Line isAnimationActive={!pdfMode} key={fi.originalName} type="linear" dataKey={fi.originalName} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} name={fi.originalName} />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div ref={el => { chartRefs.current['fi-ts'] = el; }}>
+                  <TimeSeriesPanel
+                    title="分類コード別出願件数の時系列分析" accent="#9333ea" idPrefix="fi"
+                    ranking={filteredAnalysis.allFIs}
+                    yearAnalysis={filteredAnalysis.fiYearAnalysis}
+                    describe={getFiDescription}
+                    pdfMode={pdfMode}
+                  />
                 </div>
               )}
             </div>
